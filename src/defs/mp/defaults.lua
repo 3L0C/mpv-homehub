@@ -31,13 +31,13 @@ local mp = {}
 ---@param key string
 ---@param name_or_fn string|function
 ---@param fn? async fun()
----@param flags? KeybindFlags
+---@param flags? InputFlags
 function mp.add_key_binding(key, name_or_fn, fn, flags) end
 
 ---@param key string
 ---@param name_or_fn string|function
 ---@param fn? async fun()
----@param flags? KeybindFlags
+---@param flags? InputFlags
 function mp.add_forced_key_binding(key, name_or_fn, fn, flags) end
 
 ---@param seconds number
