@@ -1,14 +1,19 @@
 --[[
-    Low level logging interface for HomeHub
+--  Low level logging interface for HomeHub
 --]]
 
 local msg = require 'mp.msg'
 local utils = require 'mp.utils'
 
+---@class LoggerData
+---@field msg string[]|string
+---@field separator? string
+
 ---@class logger
 local logger = {
     ---@alias LoggerFun fun(message: string)
     ---@alias LoggerHandler table<string,LoggerFun>
+    ---@type LoggerHandler
     handlers = {
         ['debug'] = function(message) msg.debug(message) end,
         ['error'] = function(message) msg.error(message) end,
@@ -46,7 +51,6 @@ function logger.log(event_name, data)
         return
     end
 
-    ---@type LoggerFun
     local fn = logger.handlers[level]
     if not fn or type(fn) ~= 'function' then
         msg.error('[Logger] Got invalid message level:', level)

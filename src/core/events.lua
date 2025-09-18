@@ -1,15 +1,13 @@
 --[[
-    Event system and observers
+--  Event system and observers
 --]]
 
 local logger = require 'src.core.logger'
 
----@alias Data table<unknown,unknown>
----@alias ListenerCB fun(event_name: string, data?: Data)
-
----@class LoggerData
----@field msg string[]|string
----@field separator? string
+---@alias EventName string
+---@alias EventData table<unknown,unknown>
+---@alias ListenerCB fun(event_name: string, data?: EventData)
+---@alias ComponentName string
 
 ---@class Listener
 ---@field callback ListenerCB
@@ -20,27 +18,28 @@ local logger = require 'src.core.logger'
 ---@field identifier string For wildcard or event type
 ---@field listener Listener
 
----@class events
-local events = {
-    ---@type table<string,Listener[]>
+---@class EventState
+---@field listeners table<EventName,Listener[]>
+---@field wildcards table<EventName,Listener[]>
+---@field components table<ComponentName,TrackedListener[]>
+
+---@type EventState
+local state = {
     listeners = {},
-    ---@type table<string,Listener[]>
     wildcards = {},
-    ---@type table<string,TrackedListener[]>
     components = {},
-    debug_mode = false,
-    ---@type ListenerCB
-    logger = logger.log,
 }
+
+---@class events: Controller
+local events = {}
 
 ---Initialize the event system
 function events.init()
-    events.listeners = {}
-    events.wildcards = {}
-    events.components = {}
-    events.logger = logger.log
+    state.listeners = {}
+    state.wildcards = {}
+    state.components = {}
 
-    events.logger('msg.info.events', {
+    logger.log('msg.info.events', {
         msg = 'Event system initialized'
     })
 end
@@ -48,10 +47,10 @@ end
 ---Register a component for lifecycle tracking
 ---@param component_name string
 function events.register_component(component_name)
-    if not events.components[component_name] then
+    if not state.components[component_name] then
         ---@type TrackedListener[]
-        events.components[component_name] = {}
-        events.logger('msg.info.events', {
+        state.components[component_name] = {}
+        logger.log('msg.info.events', {
             msg = {'Registered component:', component_name},
         })
     end
@@ -59,7 +58,7 @@ end
 
 ---Add event listener.
 ---Will register the component if not yet tracked.
----@param event_name string
+---@param event_name EventName
 ---@param callback ListenerCB
 ---@param component_name? string
 ---@return nil
@@ -83,13 +82,13 @@ function events.on(event_name, callback, component_name)
     if event_name:match('%.%*$') then
         local namespace = event_name:gsub('%.%*$', '')
 
-        if not events.wildcards[namespace] then
-            events.wildcards[namespace] = {}
+        if not state.wildcards[namespace] then
+            state.wildcards[namespace] = {}
         end
-        table.insert(events.wildcards[namespace], listener)
+        table.insert(state.wildcards[namespace], listener)
 
         -- Track for component cleanup
-        table.insert(events.components[component_name], {
+        table.insert(state.components[component_name], {
             type = 'wildcard',
             identifier = namespace,
             listener = listener,
@@ -97,40 +96,40 @@ function events.on(event_name, callback, component_name)
 
     else
         -- Regular event listener
-        if not events.listeners[event_name] then
-            events.listeners[event_name] = {}
+        if not state.listeners[event_name] then
+            state.listeners[event_name] = {}
         end
-        table.insert(events.listeners[event_name], listener)
+        table.insert(state.listeners[event_name], listener)
 
         -- Track for component cleanup
-        table.insert(events.components[component_name], {
+        table.insert(state.components[component_name], {
             type = 'event',
             identifier = event_name,
             listener = listener,
         })
     end
 
-    events.logger('msg.info.events', {
+    logger.log('msg.info.events', {
         msg = {'Added listener for', event_name, 'from component', component_name},
     })
 end
 
 ---Remove event listener(s)
----@param event_name string
+---@param event_name EventName
 ---@param callback ListenerCB
 ---@param component_name? string
 ---@return nil
 function events.off(event_name, callback, component_name)
     if not callback and not component_name then
         -- Remove all listeners for this event
-        events.listeners[event_name] = nil
-        events.logger('msg.info.events', {
+        state.listeners[event_name] = nil
+        logger.log('msg.info.events', {
             msg = {'Removed all listeners for', event_name},
         })
         return
     end
 
-    local listeners_list = events.listeners[event_name]
+    local listeners_list = state.listeners[event_name]
     if not listeners_list then return end
 
     -- Remove specific listeners
@@ -148,7 +147,7 @@ function events.off(event_name, callback, component_name)
 
         if should_remove then
             table.remove(listeners_list, i)
-            events.logger('msg.info.events', {
+            logger.log('msg.info.events', {
                 msg = {'Removed listener for', event_name, 'from component', listener.component},
             })
         end
@@ -156,24 +155,24 @@ function events.off(event_name, callback, component_name)
 end
 
 ---Emit an event
----@param event_name string
----@param data? table<unknown,unknown>
+---@param event_name EventName
+---@param data? EventData
 ---@return number Listeners called.
 function events.emit(event_name, data)
-    events.logger('msg.info.events', {
+    logger.log('msg.info.events', {
         msg = {'Emitting event:', event_name, 'with data:', data and 'present' or 'none'},
     })
 
     local listeners_called = 0
 
     -- Call direct listeners
-    local direct_listeners = events.listeners[event_name]
+    local direct_listeners = state.listeners[event_name]
     if direct_listeners then
         for _, listener in ipairs(direct_listeners) do
             listeners_called = listeners_called + 1
             local success, err = pcall(listener.callback, event_name, data)
             if not success then
-                events.logger('msg.error.events', {msg = {
+                logger.log('msg.error.events', {msg = {
                     '[Events] Error in listener for', event_name,
                     'from component', listener.component, ':', err
                 }})
@@ -182,13 +181,13 @@ function events.emit(event_name, data)
     end
 
     -- Call wildcard listeners
-    for namespace, wildcard_listeners in pairs(events.wildcards) do
+    for namespace, wildcard_listeners in pairs(state.wildcards) do
         if event_name:match('^' .. namespace:gsub('%.', '%.') .. '%.') then
             for _, listener in ipairs(wildcard_listeners) do
                 listeners_called = listeners_called + 1
                 local success, err = pcall(listener.callback, event_name, data)
                 if not success then
-                    events.logger('msg.error.events', {msg = {
+                    logger.log('msg.error.events', {msg = {
                         'Error in wildcard listener for', namespace,
                         'from component', listener.component, ':', err
                     }})
@@ -197,7 +196,7 @@ function events.emit(event_name, data)
         end
     end
 
-    events.logger('msg.info.events', {
+    logger.log('msg.info.events', {
         msg = {'Called', listeners_called, 'listeners for', event_name},
     })
 
@@ -208,9 +207,9 @@ end
 ---@param component_name string
 ---@return nil
 function events.cleanup_component(component_name)
-    local component_listeners = events.components[component_name]
+    local component_listeners = state.components[component_name]
     if not component_listeners then
-        events.logger('msg.verbose.events', {
+        logger.log('msg.verbose.events', {
             msg = {'No listeners found for component', component_name},
         })
         return
@@ -222,7 +221,7 @@ function events.cleanup_component(component_name)
     for _, tracked_listener in ipairs(component_listeners) do
         if tracked_listener.type == 'event' then
             -- Remove from regular listeners
-            local event_listeners = events.listeners[tracked_listener.identifier]
+            local event_listeners = state.listeners[tracked_listener.identifier]
             if event_listeners then
                 for i = #event_listeners, 1, -1 do
                     if event_listeners[i] == tracked_listener.listener then
@@ -234,7 +233,7 @@ function events.cleanup_component(component_name)
             end
         elseif tracked_listener.type == 'wildcard' then
             -- Remove from wildcard listeners
-            local wildcard_listeners = events.wildcards[tracked_listener.identifier]
+            local wildcard_listeners = state.wildcards[tracked_listener.identifier]
             if wildcard_listeners then
                 for i = #wildcard_listeners, 1, -1 do
                     if wildcard_listeners[i] == tracked_listener.listener then
@@ -248,9 +247,9 @@ function events.cleanup_component(component_name)
     end
 
     -- Clear component tracking
-    events.components[component_name] = nil
+    state.components[component_name] = nil
 
-    events.logger('msg.info.events', {
+    logger.log('msg.info.events', {
         msg = {'Cleaned up', removed_count, 'listeners for component', component_name},
     })
 end
@@ -265,18 +264,18 @@ function events.get_debug_info()
     }
 
     -- Count regular listeners
-    for _, listeners_list in pairs(events.listeners) do
+    for _, listeners_list in pairs(state.listeners) do
         info.total_events = info.total_events + 1
         info.total_listeners = info.total_listeners + #listeners_list
     end
 
     -- Count wildcard listeners
-    for _, listeners_list in pairs(events.wildcards) do
+    for _, listeners_list in pairs(state.wildcards) do
         info.total_wildcards = info.total_wildcards + #listeners_list
     end
 
     -- Count by component
-    for component_name, tracked_listeners in pairs(events.components) do
+    for component_name, tracked_listeners in pairs(state.components) do
         info.components[component_name] = #tracked_listeners
     end
 
@@ -284,16 +283,16 @@ function events.get_debug_info()
 end
 
 ---Utility function to check if anyone is listening to an event
----@param event_name string
+---@param event_name EventName
 ---@return boolean
 function events.has_listeners(event_name)
     -- Check direct listeners
-    if events.listeners[event_name] and #events.listeners[event_name] > 0 then
+    if state.listeners[event_name] and #state.listeners[event_name] > 0 then
         return true
     end
 
     -- Check wildcard listeners
-    for namespace, listeners_list in pairs(events.wildcards) do
+    for namespace, listeners_list in pairs(state.wildcards) do
         if event_name:match('^' .. namespace:gsub('%.', '%.') .. '%.') and #listeners_list > 0 then
             return true
         end

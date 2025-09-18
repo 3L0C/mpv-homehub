@@ -1,21 +1,22 @@
 --[[
-    Initialization and module loading
+--  Initialization and module loading
 --]]
 
 -- System initialization and module loading
 local options = require 'src.core.options'
-local system = require 'src.core.system'
 local events = require 'src.core.events'
 
 -- Load MVC components
----@class controllers
+---@type table<string,Controller>
 local controllers = {
     auth = require 'src.controllers.auth',
     input = require 'src.controllers.input',
     media = require 'src.controllers.media',
     messenger = require 'src.controllers.messenger',
     navigation = require 'src.controllers.navigation',
+    plugin = require 'src.controllers.plugin',
     search = require 'src.controllers.search',
+    system = require 'src.controllers.system',
     view = require 'src.controllers.view',
 }
 
@@ -46,8 +47,5 @@ return {
         for _, view in pairs(views) do
             view.init()
         end
-
-        -- Ready!
-        system.init()
     end
 }
