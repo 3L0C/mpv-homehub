@@ -80,9 +80,9 @@ end
 local function bind(_, data)
     local key, event, ctx, flags = get_input_data(data)
     if not is_valid_bind(key, event) then
-        events.emit('msg.error.input', {
-            msg = {"Got invalid data in 'bind' request:", utils.to_string(data)}
-        })
+        events.emit('msg.error.input', { msg = {
+            "Got invalid data in 'input.bind' request:", utils.to_string(data)
+        } })
         return
     end
 
