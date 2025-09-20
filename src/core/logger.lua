@@ -8,11 +8,12 @@ local utils = require 'mp.utils'
 ---@class LoggerData
 ---@field msg string[]|string
 ---@field separator? string
+---
+---@alias LoggerFun fun(message: string)
+---@alias LoggerHandler table<string,LoggerFun>
 
 ---@class logger
 local logger = {
-    ---@alias LoggerFun fun(message: string)
-    ---@alias LoggerHandler table<string,LoggerFun>
     ---@type LoggerHandler
     handlers = {
         ['debug'] = function(message) msg.debug(message) end,
@@ -40,6 +41,7 @@ function logger.log(event_name, data)
 
     local level, component = event_name:match('^msg%.([^%.]+)%.?(.*)$')
     component = component ~= '' and component or 'unknown'
+
     ---@type string
     local message = ('[%s] '):format(component)
     if type(data.msg) == 'string' then
@@ -62,3 +64,5 @@ function logger.log(event_name, data)
         msg.error('[Logger] Handler error for level', level, ':', err)
     end
 end
+
+return logger
