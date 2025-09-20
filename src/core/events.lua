@@ -6,7 +6,7 @@ local logger = require 'src.core.logger'
 
 ---@alias EventName string
 ---@alias EventData table<unknown,unknown>
----@alias ListenerCB fun(event_name: string, data?: EventData)
+---@alias ListenerCB fun(event_name: string, data?: EventData): nil
 ---@alias ComponentName string
 
 ---@class Listener
@@ -197,7 +197,7 @@ function events.emit(event_name, data)
     end
 
     logger.log('msg.info.events', {
-        msg = {'Called', listeners_called, 'listeners for', event_name},
+        msg = {'Called', tostring(listeners_called), 'listeners for', event_name},
     })
 
     return listeners_called
@@ -250,36 +250,8 @@ function events.cleanup_component(component_name)
     state.components[component_name] = nil
 
     logger.log('msg.info.events', {
-        msg = {'Cleaned up', removed_count, 'listeners for component', component_name},
+        msg = {'Cleaned up', tostring(removed_count), 'listeners for component', component_name},
     })
-end
-
----Get debugging information
-function events.get_debug_info()
-    local info = {
-        total_events = 0,
-        total_listeners = 0,
-        total_wildcards = 0,
-        components = {}
-    }
-
-    -- Count regular listeners
-    for _, listeners_list in pairs(state.listeners) do
-        info.total_events = info.total_events + 1
-        info.total_listeners = info.total_listeners + #listeners_list
-    end
-
-    -- Count wildcard listeners
-    for _, listeners_list in pairs(state.wildcards) do
-        info.total_wildcards = info.total_wildcards + #listeners_list
-    end
-
-    -- Count by component
-    for component_name, tracked_listeners in pairs(state.components) do
-        info.components[component_name] = #tracked_listeners
-    end
-
-    return info
 end
 
 ---Utility function to check if anyone is listening to an event
