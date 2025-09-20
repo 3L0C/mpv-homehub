@@ -145,9 +145,9 @@ end
 local function unbind(_, data)
     local key = get_input_data(data)
     if key == '' then
-        events.emit('msg.error.input', {
-            msg = {"Got invalid data in 'unbind' request:", utils.to_string(data)}
-        })
+        events.emit('msg.error.input', { msg = {
+            "Got invalid data in 'unbind' request:", utils.to_string(data)
+        } })
         return
     end
 
