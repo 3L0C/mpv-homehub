@@ -17,9 +17,9 @@ local navigation = {}
 ---
 ---@alias NavID string
 ---@alias NavCtxID string
----@alias NavTable table<NavID,NavState>
----@alias NavCtx table<NavCtxID,NavID[]>
----@alias NavStack NavCtxID[]
+---@alias NavIDTable table<NavID,NavState>
+---@alias NavCtxTable table<NavCtxID,NavID[]>
+---@alias NavCtxStack NavCtxID[]
 ---
 ---@class NavCtxChangedData
 ---@field old_ctx NavCtxID
@@ -27,15 +27,24 @@ local navigation = {}
 ---@field nav_id NavID
 ---
 ---@class NavCtxCleanupData
----@field reason 'error'|'cleanup'
+---@field ctx_id NavCtxID
 ---
----@class NavCtxPoppedData
----@field popped_ctx NavCtxID
----@field reason 'error'|'cleanup'|'unknown'
+---@alias NavCtxCleanedData NavCtxChangedData
 ---
----@class NavToData: NavState
+---@alias NavCtxPopData NavCtxCleanupData
+---
+---@alias NavCtxPoppedData NavCtxChangedData
+---
+---@class NavCtxPushData
 ---@field ctx_id NavCtxID
 ---@field nav_id NavID
+---
+---@alias NavCtxPushedData NavCtxChangedData
+---
+---@class NavSelectedData
+---@field ctx_id NavCtxID
+---@field nav_id NavID
+---@field position number
 ---
 ---@class NavPosChangedData
 ---@field nav_id NavID
@@ -47,13 +56,14 @@ local navigation = {}
 ---@class NavToData: NavState
 ---@field ctx_id NavCtxID
 ---@field nav_id NavID
+---@field position number (0 = preserve/default, >0 = specific position)
 
----@type NavTable
-local nav_table = {}
----@type NavCtx
-local nav_ctx = {}
----@type NavStack
-local nav_stack = {}
+---@type NavIDTable
+local nav_id_table = {}
+---@type NavCtxTable
+local nav_ctx_table = {}
+---@type NavCtxStack
+local nav_ctx_stack = {}
 
 ---Validates a navigation state object.
 ---@param state any
@@ -77,10 +87,10 @@ local function cleanup_corrupted_state(nav_id)
     } })
 
     -- Remove from nav_table
-    nav_table[nav_id] = nil
+    nav_id_table[nav_id] = nil
 
     -- Remove from all contexts
-    for ctx_id, nav_id_array in pairs(nav_ctx) do
+    for ctx_id, nav_id_array in pairs(nav_ctx_table) do
         for i = #nav_id_array, 1, -1 do
             if nav_id_array[i] == nav_id then
                 table.remove(nav_id_array, i)
@@ -88,13 +98,13 @@ local function cleanup_corrupted_state(nav_id)
         end
         -- If context becomes empty, remove it from stack
         if #nav_id_array == 0 then
-            for j = #nav_stack, 1, -1 do
-                if nav_stack[j] == ctx_id then
-                    table.remove(nav_stack, j)
+            for j = #nav_ctx_stack, 1, -1 do
+                if nav_ctx_stack[j] == ctx_id then
+                    table.remove(nav_ctx_stack, j)
                 end
             end
             -- Also remove the empty context
-            nav_ctx[ctx_id] = nil
+            nav_ctx_table[ctx_id] = nil
         end
     end
 
@@ -103,8 +113,8 @@ end
 
 ---Assert the nav_stack is valid.
 ---@return boolean
-local function assert_nav_stack()
-    if #nav_stack == 0 then
+local function assert_nav_ctx_stack()
+    if #nav_ctx_stack == 0 then
         events.emit('msg.warn.navigation', { msg = { 'Navigation stack is empty' } })
         return false
     end
@@ -113,9 +123,9 @@ end
 
 ---Assert the nav_ctx is valid.
 ---@return boolean
-local function assert_nav_ctx()
-    local top = nav_stack[#nav_stack]
-    if not nav_ctx[top] or #nav_ctx[top] == 0 then
+local function assert_nav_ctx_table()
+    local top = nav_ctx_stack[#nav_ctx_stack]
+    if not nav_ctx_table[top] or #nav_ctx_table[top] == 0 then
         events.emit('msg.warn.navigation', { msg = { 'Navigation context is empty:', top } })
         return false
     end
@@ -125,12 +135,12 @@ end
 ---Get the current navigation state from `nav_table`.
 ---@return NavState|nil
 local function get_current_state()
-    if not assert_nav_stack() then return nil end
-    if not assert_nav_ctx() then return nil end
+    if not assert_nav_ctx_stack() then return nil end
+    if not assert_nav_ctx_table() then return nil end
 
-    local ctx = nav_stack[#nav_stack]
-    local nav_id = nav_ctx[ctx][#nav_ctx[ctx]]
-    local nav_state = nav_table[nav_id]
+    local ctx = nav_ctx_stack[#nav_ctx_stack]
+    local nav_id = nav_ctx_table[ctx][#nav_ctx_table[ctx]]
+    local nav_state = nav_id_table[nav_id]
 
     if not is_valid_state(nav_state) then
         cleanup_corrupted_state(nav_id)
@@ -140,15 +150,22 @@ local function get_current_state()
     return nav_state
 end
 
----Get the current navigation id from `nav_ctx`.
----@return NavID|nil
-local function get_current_nav_id()
-    if not assert_nav_stack() then return nil end
-    if not assert_nav_ctx() then return nil end
+---Get the current context id from `nav_ctx_stack`.
+---@return NavCtxID
+local function get_current_ctx_id()
+    if not assert_nav_ctx_stack() then return '' end
+    return nav_ctx_stack[#nav_ctx_stack]
+end
 
-    local ctx_id = nav_stack[#nav_stack]
-    local nav_hist = nav_ctx[ctx_id]
-    return nav_hist[#nav_hist]
+---Get the current navigation id from `nav_ctx_table`.
+---@return NavID
+local function get_current_nav_id()
+    if not assert_nav_ctx_stack() then return '' end
+    if not assert_nav_ctx_table() then return '' end
+
+    local ctx_id = nav_ctx_stack[#nav_ctx_stack]
+    local nav_hist = nav_ctx_table[ctx_id]
+    return nav_hist[#nav_hist] or ''
 end
 
 ---Get the position wrapped.
@@ -179,7 +196,7 @@ local function safe_navigate(direction, state, increment)
     state.position = get_position_wrap(state, increment)
 
     events.emit('nav.pos_changed', {
-        nav_id = get_current_nav_id() or '<unknown>',
+        nav_id = get_current_nav_id(),
         pos = state.position,
         old_pos = old_position,
         columns = state.columns,
@@ -194,7 +211,13 @@ local function is_valid_nav_to_data(data)
     return type(data) == 'table'
         and type(data.ctx_id) == 'string'
         and type(data.nav_id) == 'string'
-        and is_valid_state(data)
+        and type(data.columns) == 'number'
+        and type(data.position) == 'number'
+        and type(data.total_items) == 'number'
+        and data.columns >= 1
+        and data.position >= 0
+        and data.total_items >= 0
+        and (data.total_items == 0 or data.position <= data.total_items)
 end
 
 ---Test if `ctx_id` is the current context.
@@ -202,17 +225,64 @@ end
 ---@param ctx_id NavCtxID
 ---@return boolean
 local function in_context(ctx_id)
-    return nav_stack[#nav_stack] == ctx_id
+    return nav_ctx_stack[#nav_ctx_stack] == ctx_id
 end
 
 ---Wrapper for `events.emit('msg.error.navigation')` when data is invalid.
 ---@param event_name EventName
----@param data EventData
+---@param data EventData|nil
 local function emit_data_error(event_name, data)
     events.emit('msg.error.navigation', { msg = {
         ("Received invalid data to '%s' request:"):format(event_name),
         utils.to_string(data)
     } })
+end
+
+---Helper to emit a selection type event.
+---@param selection_type 'nav.selected'|'nav.multiselected'
+local function emit_select_type_event(selection_type)
+    local state = get_current_state()
+    if not state then return end
+
+    events.emit(selection_type, {
+        ctx_id = get_current_ctx_id(),
+        nav_id = get_current_nav_id(),
+        position = state.position,
+    } --[[@as NavSelectedData]])
+end
+
+---If `ctx_id` is the current context, delete it from the stack, and tables.
+---@param event_name EventName
+---@param ctx_id NavCtxID
+---@return boolean
+local function delete_current_context(event_name, ctx_id)
+    if #nav_ctx_stack == 0 then
+        events.emit('msg.warn.navigation', { msg = {
+            ("Cannot delete context '%s', no context established."):format(ctx_id)
+        } })
+        return false
+    end
+
+    if not in_context(ctx_id) then
+        events.emit('msg.error.navigation', { msg = {
+            ("Current context does not match '%s' request:"):format(event_name),
+            nav_ctx_stack[#nav_ctx_stack], ctx_id
+        } })
+        return false
+    end
+
+    -- Delete the current ctx from the stack.
+    local old_ctx = table.remove(nav_ctx_stack)
+
+    -- Clean up the relevant references in the nav_id_table
+    if nav_ctx_table[old_ctx] then
+        for _, nav_id in ipairs(nav_ctx_table[old_ctx]) do
+            nav_id_table[nav_id] = nil
+        end
+        nav_ctx_table[old_ctx] = nil
+    end
+
+    return true
 end
 
 ---@type HandlerTable
@@ -275,29 +345,32 @@ local handlers = {
             return
         end
 
-        if #nav_stack == 0 then table.insert(nav_stack, data.ctx_id) end
-
-        if not in_context(data.ctx_id) then
+        if #nav_ctx_stack == 0 or not nav_ctx_table[data.ctx_id] then
             events.emit('msg.error.navigation', { msg = {
-                "Received 'nav.navigate_to' request for context different from the current one:",
-                data.ctx_id, nav_stack[#nav_stack]
+                "Cannot navigate - context not initialized:", data.ctx_id,
+                "Use 'nav.context_push' first."
             } })
             return
         end
 
-        -- Create context history if it doesn't exist
-        if not nav_ctx[data.ctx_id] then nav_ctx[data.ctx_id] = {} end
+        if not in_context(data.ctx_id) then
+            events.emit('msg.error.navigation', { msg = {
+                "Received 'nav.navigate_to' request for context different from the current one:",
+                data.ctx_id, nav_ctx_stack[#nav_ctx_stack]
+            } })
+            return
+        end
 
-        local nav_hist = nav_ctx[data.ctx_id]
+        local nav_hist = nav_ctx_table[data.ctx_id]
 
-        local old_state = nav_table[data.nav_id]
+        local old_state = nav_id_table[data.nav_id]
         if not is_valid_state(old_state) then
             events.emit('msg.warn.navigation', { msg = {
                 'Found corrupted navigation state for', data.nav_id, '- resetting.'
             } })
             old_state = {
                 columns = 1,
-                position = data.position,
+                position = data.position == 0 and 1 or data.position,
                 total_items = 0,
             }
         end
@@ -305,17 +378,17 @@ local handlers = {
         ---@type NavState
         local new_state = {
             columns = data.columns,
-            position = data.position,
+            position = data.position == 0 and 1 or data.position,
             total_items = data.total_items,
         }
-        if old_state.position ~= new_state.position
+        if data.position == 0
         and old_state.position <= new_state.total_items
         then
             new_state.position = old_state.position
         end
 
         table.insert(nav_hist, data.nav_id)
-        nav_table[data.nav_id] = new_state
+        nav_id_table[data.nav_id] = new_state
 
         events.emit('nav.navigated_to', {
             ctx_id = data.ctx_id,
@@ -327,15 +400,15 @@ local handlers = {
     end,
 
     ['nav.back'] = function(_, _)
-        if #nav_stack == 0 then
+        if #nav_ctx_stack == 0 then
             events.emit('msg.warn.navigation', { msg = {
                 "Got 'nav.back' event, outside any navigation context."
             } })
             return
         end
 
-        local ctx_id = nav_stack[#nav_stack]
-        local nav_hist = nav_ctx[ctx_id]
+        local ctx_id = nav_ctx_stack[#nav_ctx_stack]
+        local nav_hist = nav_ctx_table[ctx_id]
 
         if not nav_hist or #nav_hist == 0 then
             -- 'nav.back' received before 'nav.navigate_to' received.
@@ -343,7 +416,7 @@ local handlers = {
                 ("Got 'nav.back' in context '%s' with no history."):format(ctx_id)
             } })
             -- Cleanup the invalid context.
-            events.emit('nav.context_pop', { reason = 'error' })
+            events.emit('nav.context_cleanup', { ctx_id = ctx_id })
             return
         elseif #nav_hist == 1 then
             events.emit('msg.debug.navigation', { msg = {
@@ -356,7 +429,7 @@ local handlers = {
         local nav_id = nav_hist[#nav_hist - 1]
 
         -- Ensure we are moving back to a valid state.
-        local nav_state = nav_table[nav_id]
+        local nav_state = nav_id_table[nav_id]
         if not nav_state or not is_valid_state(nav_state) then
             events.emit('msg.error.navigation', { msg = {
                 ("Tried navigating back to '%s', but state is corrupted:"):format(nav_id),
@@ -364,14 +437,14 @@ local handlers = {
             } })
 
             -- Cleanup the corrupted state
-            nav_table[nav_id] = nil
+            nav_id_table[nav_id] = nil
 
             -- Remove the current nav_id from the history
             table.remove(nav_hist)
 
             -- Check if the corrupted nav_id is the root.
             if #nav_hist == 1 then
-                events.emit('nav.context_pop', { reason = 'error' } --[[@as NavCtxCleanupData]])
+                events.emit('nav.context_cleanup', { ctx_id = ctx_id } --[[@as NavCtxCleanupData]])
                 return
             end
 
@@ -392,44 +465,92 @@ local handlers = {
 
     -- Context events
 
+    ---Context changed. Update current context, and inform listeners of the change.
     ---@param event_name EventName
-    ---@param data NavCtxCleanupData|EventData|nil
-    ['nav.context_cleanup'] = function(event_name, data)
-        if not data or not data.reason then
-            emit_data_error(event_name, data --[[@as EventData]])
+    ---@param data NavCtxPushData|EventData|nil
+    ['nav.context_push'] = function(event_name, data)
+        if not data or not data.ctx_id or not data.nav_id then
+            emit_data_error(event_name, data)
             return
         end
 
-        if #nav_stack == 0 then
-            events.emit('msg.warn.navigation', { msg = {
-                'Cannot pop context - stack is empty.'
+        if #nav_ctx_stack == 0 then nav_ctx_stack = {} end
+        if nav_ctx_stack[#nav_ctx_stack] == data.ctx_id then
+            if get_current_nav_id() == data.nav_id then
+                events.emit('msg.warn.navigation', { msg = {
+                    "Ignoring redundant context push - already in context:",
+                    data.ctx_id
+                } })
+            else
+                events.emit('msg.warn.navigation', { msg = {
+                    ("Ignoring 'nav.context_push' request - already in context '%s', with different nav_id '%s'."):format(
+                        data.ctx_id, get_current_nav_id()
+                    ),
+                    "Use 'nav.navigate_to' instead."
+                } })
+            end
+            return
+        end
+
+        local old_ctx = nav_ctx_stack[#nav_ctx_stack]
+        table.insert(nav_ctx_stack, data.ctx_id)
+
+        events.emit('nav.context_pushed', {
+            old_ctx = old_ctx or '',
+            new_ctx = data.ctx_id,
+            nav_id = data.nav_id,
+        } --[[@as NavCtxPushedData]])
+    end,
+
+    ---Remove the current context from the stack.
+    ---@param event_name EventName
+    ---@param data NavCtxPopData|EventData|nil
+    ['nav.context_pop'] = function(event_name, data)
+        if not data or not data.ctx_id then
+            emit_data_error(event_name, data)
+            return
+        end
+
+        if not delete_current_context(event_name, data.ctx_id) then
+            events.emit('msg.error.navigation', { msg = {
+                "Unable to pop context:", data.ctx_id
             } })
             return
-        end
-
-        -- Pop the stale context
-        local old_ctx = table.remove(nav_stack)
-        local reason = data.reason or 'unknown'
-
-        -- Clean up the popped context
-        if nav_ctx[old_ctx] then
-            for _, nav_id in ipairs(nav_ctx[old_ctx]) do
-                nav_table[nav_id] = nil
-            end
-            nav_ctx[old_ctx] = nil
         end
 
         events.emit('nav.context_popped', {
-            popped_ctx = old_ctx,
-            reason = reason,
+            old_ctx = data.ctx_id,
+            new_ctx = nav_ctx_stack[#nav_ctx_stack] or '',
+            nav_id = get_current_nav_id()
         } --[[@as NavCtxPoppedData]])
-
-        if #nav_stack == 0 then
-            events.emit('msg.warn.navigation', { msg = {
-                'All navigation contexts have been popped - no active context.'
-            } })
-        end
     end,
+
+    ---@param event_name EventName
+    ---@param data NavCtxCleanupData|EventData|nil
+    ['nav.context_cleanup'] = function(event_name, data)
+        if not data or not data.ctx_id then
+            emit_data_error(event_name, data)
+            return
+        end
+
+        if not delete_current_context(event_name, data.ctx_id) then
+            events.emit('msg.error.navigation', { msg = {
+                "Unable to cleanup context:", data.ctx_id
+            } })
+            return
+        end
+
+        events.emit('nav.context_cleaned', {
+            old_ctx = data.ctx_id,
+            new_ctx = nav_ctx_stack[#nav_ctx_stack] or '',
+            nav_id = get_current_nav_id()
+        } --[[@as NavCtxCleanedData]])
+    end,
+
+    -- Selection events
+
+    ['nav.select'] = function(_, _) emit_select_type_event('nav.selected') end,
+    ['nav.multiselect'] = function(_, _) emit_select_type_event('nav.multiselected') end,
 }
 
 ---Main navigation event handler.
