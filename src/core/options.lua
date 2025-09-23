@@ -9,9 +9,11 @@ local options = {
     -- directory to load external modules - currently only user-input-module
     module_directory = '~~/script-modules',
 
-    -- default ui view
-    ---@type 'text'|'gallery'
-    ui_default_view = 'text',
+    -- default ui mode
+    ---@type UiMode
+    ui_default_mode = 'text',
+    ---@type boolean
+    ui_autostart = false,
 }
 
 function options.init()
