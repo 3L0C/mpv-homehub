@@ -5,6 +5,7 @@
 -- System initialization and module loading
 local options = require 'src.core.options'
 local events = require 'src.core.events'
+local system = require 'src.controllers.system'
 
 -- Load MVC components
 ---@type table<string,Controller>
@@ -16,14 +17,7 @@ local controllers = {
     navigation = require 'src.controllers.navigation',
     plugin = require 'src.controllers.plugin',
     search = require 'src.controllers.search',
-    system = require 'src.controllers.system',
-    view = require 'src.controllers.view',
-}
-
----@class views
-local views = {
-    gallery = require 'src.views.gallery.grid',
-    text = require 'src.views.text.browser',
+    ui = require 'src.controllers.ui.ui',
 }
 
 -- Load adapters
@@ -31,7 +25,7 @@ local adapter_manager = require 'src.models.base.adapter'
 
 return {
     start = function()
-        -- Initialize system
+        -- Initialize core
         options.init()
         events.init()
 
@@ -43,9 +37,7 @@ return {
         -- Load configured adapters
         adapter_manager.load_adapters()
 
-        -- Setup views
-        for _, view in pairs(views) do
-            view.init()
-        end
+        -- Start HomeHub
+        system.init()
     end
 }
