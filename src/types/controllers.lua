@@ -1,4 +1,4 @@
----@meda _
+---@meta _
 
 ---Represents the Controller objects
 ---@class Controller
