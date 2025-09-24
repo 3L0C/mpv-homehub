@@ -5,10 +5,11 @@
 local mp = require "mp"
 local utils = require 'mp.utils'
 
-local events = require "src.core.events"
+local events = require 'src.core.events'
+local hh_utils = require 'src.core.utils'
 
 ---@alias InputKey string
----@alias InputContext table<unknown,unknown>
+---@alias InputCtx EventData
 
 ---@class InputFlags
 ---@field repeatable boolean?
@@ -19,13 +20,13 @@ local events = require "src.core.events"
 ---@field key InputKey
 ---@field event EventName
 ---@field name string
----@field ctx InputContext
+---@field ctx InputCtx
 ---@field flags? InputFlags
 
 ---@class InputData
 ---@field key InputKey
 ---@field event EventName
----@field ctx InputContext
+---@field ctx InputCtx
 ---@field flags InputFlags
 
 --@class input: Controller
@@ -46,14 +47,14 @@ end
 ---@param data InputData
 ---@return InputKey key string
 ---@return EventName event string
----@return InputContext Event context
+---@return InputCtx Event context
 ---@return InputFlags flags table
 local function get_input_data(data)
     ---@type InputKey
     local key = ''
     ---@type EventName
     local event = ''
-    ---@type InputContext
+    ---@type InputCtx
     local ctx = {}
     ---@type InputFlags
     local flags = {}
@@ -72,45 +73,6 @@ local function get_input_data(data)
     end
 
     return key, event, ctx, flags
-end
-
----Bind keys to the input stack.
----@param _ string
----@param data InputData
-local function bind(_, data)
-    local key, event, ctx, flags = get_input_data(data)
-    if not is_valid_bind(key, event) then
-        events.emit('msg.error.input', { msg = {
-            "Got invalid data in 'input.bind' request:", utils.to_string(data)
-        } })
-        return
-    end
-
-    if not binding_stack[key] then
-        binding_stack[key] = {}
-    end
-
-    local stack = binding_stack[key]
-
-    -- Remove previous bind
-    local previous_bind = stack[#stack]
-    if previous_bind then
-        mp.remove_key_binding(previous_bind.name)
-    end
-
-    -- Push new event ont stack
-    ---@type InputBind
-    local new_bind = {
-        key = key,
-        event = event,
-        name = 'homehub/' .. event:gsub('%.', '_') .. '_' .. key,
-        ctx = ctx,
-        flags = flags,
-    }
-    table.insert(binding_stack[key], new_bind)
-    mp.add_forced_key_binding(
-        key, new_bind.name, function() events.emit(new_bind.event, ctx) end, new_bind.flags
-    )
 end
 
 ---Removes binds from `#stack` to `to`.
@@ -139,38 +101,90 @@ local function unbind_to(stack, to)
     until #stack < to
 end
 
----Removes top level bind, and restores next bind in the the stack if present.
----@param _ string
----@param data InputData
-local function unbind(_, data)
-    local key = get_input_data(data)
-    if key == '' then
-        events.emit('msg.error.input', { msg = {
-            "Got invalid data in 'unbind' request:", utils.to_string(data)
-        } })
-        return
-    end
+---@type HandlerTable
+local handlers = {
 
-    local stack = binding_stack[key]
-    if not stack then return end
+    ---Bind keys to the input stack.
+    ---@param _ EventName
+    ---@param data InputData
+    ['input.bind'] = function(_, data)
+        local key, event, ctx, flags = get_input_data(data)
+        if not is_valid_bind(key, event) then
+            events.emit('msg.error.input', { msg = {
+                "Got invalid data in 'input.bind' request:", utils.to_string(data)
+            } })
+            return
+        end
 
-    unbind_to(binding_stack[key])
+        if not binding_stack[key] then
+            binding_stack[key] = {}
+        end
 
-    -- Restore the previous bind
-    local top_bind = stack[#stack]
-    if top_bind then
+        local stack = binding_stack[key]
+
+        -- Remove previous bind
+        local previous_bind = stack[#stack]
+        if previous_bind then
+            mp.remove_key_binding(previous_bind.name)
+        end
+
+        -- Push new event ont stack
+        ---@type InputBind
+
+        local new_bind = {
+            key = key,
+            event = event,
+            name = 'homehub/' .. event:gsub('%.', '_') .. '_' .. key,
+            ctx = ctx,
+            flags = flags,
+        }
+        table.insert(binding_stack[key], new_bind)
         mp.add_forced_key_binding(
-            key, top_bind.name,
-            function() events.emit(top_bind.event, top_bind.ctx) end, top_bind.flags
+            key, new_bind.name, function() events.emit(new_bind.event, ctx) end, new_bind.flags
         )
-    end
+    end,
+
+    ---Removes top level bind, and restores next bind in the the stack if present.
+    ---@param _ EventName
+    ---@param data InputData
+    ['input.unbind'] = function(_, data)
+        local key = get_input_data(data)
+        if key == '' then
+            events.emit('msg.error.input', { msg = {
+                "Got invalid data in 'unbind' request:", utils.to_string(data)
+            } })
+            return
+        end
+
+        local stack = binding_stack[key]
+        if not stack then return end
+
+        unbind_to(binding_stack[key])
+
+        -- Restore the previous bind
+        local top_bind = stack[#stack]
+        if top_bind then
+            mp.add_forced_key_binding(
+                key, top_bind.name,
+                function() events.emit(top_bind.event, top_bind.ctx) end, top_bind.flags
+            )
+        end
+    end,
+}
+
+---Main input handler.
+---@param event_name EventName
+---@param data EventData
+local function handler(event_name, data)
+    hh_utils.handler_template(event_name, data, handlers, 'input')
 end
 
 ---Initialization function. Set's up input listeners.
 function input.init()
     binding_stack = {}
-    events.on('input.bind', bind, 'input')
-    events.on('input.unbind', unbind, 'input')
+    for event in pairs(handlers) do
+        events.on(event, handler, 'input')
+    end
 end
 
 ---Cleanup function. Unbinds everything.
