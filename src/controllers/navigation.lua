@@ -37,7 +37,6 @@ local navigation = {}
 ---
 ---@class NavCtxPushData
 ---@field ctx_id NavCtxID
----@field nav_id NavID
 ---
 ---@alias NavCtxPushedData NavCtxChangedData
 ---
@@ -79,11 +78,19 @@ local function is_valid_state(state)
         and (state.total_items == 0 or state.position <= state.total_items)
 end
 
+---Clean the `ctx_id` from the `nav_id`.
+---@param nav_id NavID
+---@return string
+local function clean_nav_id(nav_id)
+    local cleaned_nav_id = nav_id:gsub('^.-%.', '')
+    return cleaned_nav_id
+end
+
 ---Cleans up corrupted navigation state.
 ---@param nav_id NavID
 local function cleanup_corrupted_state(nav_id)
     events.emit('msg.warn.navigation', { msg = {
-        'Cleaning up corrupted navigation state:', nav_id
+        'Cleaning up corrupted navigation state:', clean_nav_id(nav_id)
     } })
 
     -- Remove from nav_table
@@ -108,7 +115,7 @@ local function cleanup_corrupted_state(nav_id)
         end
     end
 
-    events.emit('nav.state_corrupted', { nav_id = nav_id })
+    events.emit('nav.state_corrupted', { nav_id = clean_nav_id(nav_id) })
 end
 
 ---Assert the nav_stack is valid.
@@ -196,7 +203,7 @@ local function safe_navigate(direction, state, increment)
     state.position = get_position_wrap(state, increment)
 
     events.emit('nav.pos_changed', {
-        nav_id = get_current_nav_id(),
+        nav_id = clean_nav_id(get_current_nav_id()),
         pos = state.position,
         old_pos = old_position,
         columns = state.columns,
@@ -246,7 +253,7 @@ local function emit_select_type_event(selection_type)
 
     events.emit(selection_type, {
         ctx_id = get_current_ctx_id(),
-        nav_id = get_current_nav_id(),
+        nav_id = clean_nav_id(get_current_nav_id()),
         position = state.position,
     } --[[@as NavSelectedData]])
 end
@@ -283,6 +290,14 @@ local function delete_current_context(event_name, ctx_id)
     end
 
     return true
+end
+
+---Create a unique, internal, version of `nav_id` based on `ctx_id`.
+---@param ctx_id NavCtxID
+---@param nav_id NavID
+---@return NavID
+local function create_nav_id(ctx_id, nav_id)
+    return ctx_id .. '.' .. nav_id
 end
 
 ---@type HandlerTable
@@ -362,11 +377,12 @@ local handlers = {
         end
 
         local nav_hist = nav_ctx_table[data.ctx_id]
+        local nav_id = create_nav_id(data.ctx_id, data.nav_id)
 
-        local old_state = nav_id_table[data.nav_id]
+        local old_state = nav_id_table[nav_id]
         if not is_valid_state(old_state) then
             events.emit('msg.warn.navigation', { msg = {
-                'Found corrupted navigation state for', data.nav_id, '- resetting.'
+                'Found corrupted navigation state for', nav_id, '- resetting.'
             } })
             old_state = {
                 columns = 1,
@@ -387,8 +403,8 @@ local handlers = {
             new_state.position = old_state.position
         end
 
-        table.insert(nav_hist, data.nav_id)
-        nav_id_table[data.nav_id] = new_state
+        table.insert(nav_hist, nav_id)
+        nav_id_table[nav_id] = new_state
 
         events.emit('nav.navigated_to', {
             ctx_id = data.ctx_id,
@@ -456,7 +472,7 @@ local handlers = {
         table.remove(nav_hist)
         events.emit('nav.navigated_to', {
             ctx_id = ctx_id,
-            nav_id = nav_id,
+            nav_id = clean_nav_id(nav_id),
             columns = nav_state.columns,
             position = nav_state.position,
             total_items = nav_state.total_items,
@@ -469,26 +485,17 @@ local handlers = {
     ---@param event_name EventName
     ---@param data NavCtxPushData|EventData|nil
     ['nav.context_push'] = function(event_name, data)
-        if not data or not data.ctx_id or not data.nav_id then
+        if not data or not data.ctx_id then
             emit_data_error(event_name, data)
             return
         end
 
         if #nav_ctx_stack == 0 then nav_ctx_stack = {} end
         if nav_ctx_stack[#nav_ctx_stack] == data.ctx_id then
-            if get_current_nav_id() == data.nav_id then
-                events.emit('msg.warn.navigation', { msg = {
-                    "Ignoring redundant context push - already in context:",
-                    data.ctx_id
-                } })
-            else
-                events.emit('msg.warn.navigation', { msg = {
-                    ("Ignoring 'nav.context_push' request - already in context '%s', with different nav_id '%s'."):format(
-                        data.ctx_id, get_current_nav_id()
-                    ),
-                    "Use 'nav.navigate_to' instead."
-                } })
-            end
+            events.emit('msg.warn.navigation', { msg = {
+                "Ignoring redundant context push - already in context:",
+                data.ctx_id
+            } })
             return
         end
 
@@ -498,7 +505,7 @@ local handlers = {
         events.emit('nav.context_pushed', {
             old_ctx = old_ctx or '',
             new_ctx = data.ctx_id,
-            nav_id = data.nav_id,
+            nav_id = '',
         } --[[@as NavCtxPushedData]])
     end,
 
@@ -521,7 +528,7 @@ local handlers = {
         events.emit('nav.context_popped', {
             old_ctx = data.ctx_id,
             new_ctx = nav_ctx_stack[#nav_ctx_stack] or '',
-            nav_id = get_current_nav_id()
+            nav_id = clean_nav_id(get_current_nav_id()),
         } --[[@as NavCtxPoppedData]])
     end,
 
@@ -543,7 +550,7 @@ local handlers = {
         events.emit('nav.context_cleaned', {
             old_ctx = data.ctx_id,
             new_ctx = nav_ctx_stack[#nav_ctx_stack] or '',
-            nav_id = get_current_nav_id()
+            nav_id = clean_nav_id(get_current_nav_id()),
         } --[[@as NavCtxCleanedData]])
     end,
 
