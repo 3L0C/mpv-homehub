@@ -1,0 +1,11 @@
+---@meta _
+
+---Represents the items passed to the text view.
+---@class TextItem
+---@field primary_text string Main display text.
+---@field secondary_text? string Optional secondary line.
+---@field prefix_icon? string Optional leading icon/symbol.
+---@field suffix_text? string Optional trailing text/info.
+---@field style_variant? 'default'|'accent'|'secondary'|'muted'
+---@field highlight? boolean
+---@field indent_level? number Visual indentation level (0-based)
