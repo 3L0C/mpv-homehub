@@ -56,26 +56,142 @@ local handlers = {
         text_state.active = true
         text_state.visible = true
         bind_keys()
-        events.emit('nav.context_push', {
+        events.emit('text_renderer.show')
+        events.emit('nav.context_push', { ctx_id = 'text' } --[[@as NavCtxPushData]])
+        events.emit('content.request', {
             ctx_id = 'text',
-        } --[[@as NavCtxPushData]])
-        -- TODO emit 'nav.navigate_to' once the content/adapter controllers are setup.
+            location = 'root',
+        } --[[@as ContentRequestData]])
         events.emit('ui.activated_mode', { mode = 'text' } --[[@as UiModeData]])
     end,
 
     ['ui.text.deactivate'] = function(_, _)
         text_state.active = false
         text_state.visible = false
+        events.emit('text_renderer.hide')
         unbind_keys()
+        events.emit('nav.context_pop', { ctx_id = 'text' } --[[@as NavCtxPopData]])
         events.emit('ui.deactivated_mode', { mode = 'text' } --[[@as UiModeData]])
     end,
 
     ['ui.text.show'] = function(_, _)
-
+        events.emit('text_renderer.show')
     end,
 
     ['ui.text.hide'] = function(_, _)
+        events.emit('text_renderer.hide')
+    end,
 
+    -- Navigation events
+
+    ---@param event_name EventName
+    ---@param data NavCtxPushedData|EventData|nil
+    ['nav.context_pushed'] = function(event_name, data)
+        if not data or not data.old_ctx or not data.new_ctx then
+            hh_utils.emit_data_error(event_name, data)
+            return
+        end
+
+        if data.new_ctx == 'text' then
+            if text_state.active and text_state.visible then
+                -- Got our own context push event. Nothing to do.
+            else
+                -- Someone is using the 'text' context besides us...
+                events.emit('msg.warn.ui_text', { msg = {
+                    "Navigation context id 'text' pushed by another actor..."
+                } })
+            end
+        elseif data.old_ctx == 'text' then
+            -- New context pushed
+            if text_state.visible then
+                -- New context but we are still visible for some reason...
+                events.emit('msg.warn.ui_text', { msg = {
+                    "Possibly overlapping ui after 'nav.context_push'. Emit 'ui.text.hide' first."
+                } })
+            end
+        end
+    end,
+
+    ---@param event_name EventName
+    ---@param data NavToData|EventData|nil
+    ['nav.navigated_to'] = function(event_name, data)
+        if not data or not hh_utils.is_valid_nav_to_data(data) then
+            hh_utils.emit_data_error(event_name, data)
+            return
+        end
+
+        -- Not our navigation request
+        if data.ctx_id ~= 'text' then return end
+
+        events.emit('content.request', {
+            ctx_id = 'text',
+            location = data.nav_id,
+        } --[[@as ContentRequestData]])
+    end,
+
+    ---@param event_name EventName
+    ---@param data NavPosChangedData|EventData|nil
+    ['nav.pos_changed'] = function(event_name, data)
+        if not data or not data.pos or not data.old_pos or not data.ctx_id then
+            hh_utils.emit_data_error(event_name, data)
+            return
+        end
+
+        if data.ctx_id ~= 'text' then return end
+
+        events.emit('text_renderer.render', {
+            cursor_pos = data.pos,
+        } --[[@as TextRendererRenderData]])
+    end,
+
+    -- Content events
+
+    ---@param event_name EventName
+    ---@param data ContentLoadedData|EventData|nil
+    ['content.loaded'] = function(event_name, data)
+        if not data then
+            hh_utils.emit_data_error(event_name, data)
+            return
+        end
+
+        if data.ctx_id ~= 'text' then return end
+
+        events.emit('text_renderer.render', data --[[@as TextRendererRenderData]])
+    end,
+
+    ---@param event_name EventName
+    ---@param data ContentLoadingData|EventData|nil
+    ['content.loading'] = function(event_name, data)
+        if not data or not data.ctx_id then
+            hh_utils.emit_data_error(event_name, data)
+            return
+        end
+
+        if data.ctx_id ~= 'text' then return end
+
+        events.emit('text_renderer.render', {
+            items = {}
+        } --[[@as TextRendererRenderData]])
+    end,
+
+    ---@param event_name EventName
+    ---@param data ContentErrorData|EventData|nil
+    ['content.error'] = function(event_name, data)
+        if not data or not data.ctx_id then
+            hh_utils.emit_data_error(event_name, data)
+            return
+        end
+
+        if data.ctx_id ~= 'text' then return end
+
+        events.emit('text_renderer.render', {
+            items = {
+                {
+                    primary_text = data and data.msg or 'Error loading content...',
+                    highlight = true,
+                }
+            }
+        } --[[@as TextRendererRenderData]])
     end,
 }
 
