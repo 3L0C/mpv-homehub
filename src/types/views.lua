@@ -4,3 +4,8 @@
 ---@class View
 ---@field init fun() The initialization function.
 ---@field cleanup fun() The cleanup function.
+---
+---Represents the data sent/received during a `*_renderer.resize` event.
+---@class RendererResizeData
+---@field screen_width number
+---@field screen_height number

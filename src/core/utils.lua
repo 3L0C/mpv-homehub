@@ -37,6 +37,43 @@ function hh_utils.emit_data_error(event_name, data)
     } })
 end
 
+---Formats strings for ass handling.
+---This function is taken from the `mpv-file-browser` project.
+---https://github.com/CogentRedTester/mpv-file-browser/blob/master/modules/utils.lua#L245
+---@param str string
+---@param replace_newline? true|string
+---@return string
+function hh_utils.ass_escape(str, replace_newline)
+    if not str then return '' end
+
+    if replace_newline == true then
+        replace_newline = "\\\239\187\191n"
+    end
+
+    -- Escape the invalid single characters
+    str = string.gsub(str, '[\\{}\n]', {
+        -- There is no escape for '\' in ASS (I think?) but '\' is used verbatim if
+        -- it isn't followed by a recognised character, so add a zero-width
+        -- non-breaking space
+        ['\\'] = '\\\239\187\191',
+        ['{'] = '\\{',
+        ['}'] = '\\}',
+        -- Precede newlines with a ZWNBSP to prevent ASS's weird collapsing of
+        -- consecutive newlines
+        ['\n'] = '\239\187\191\\N',
+    })
+
+    -- Turn leading spaces into hard spaces to prevent ASS from stripping them
+    str = str:gsub('\\N ', '\\N\\h')
+    str = str:gsub('^ ', '\\h')
+
+    if replace_newline then
+        str = string.gsub(str, "\\N", replace_newline)
+    end
+
+    return str
+end
+
 ---Key bind helper.
 ---@param keys string[]
 ---@param event_name EventName
