@@ -24,7 +24,6 @@ local navigation = {}
 ---@class NavCtxChangedData
 ---@field old_ctx NavCtxID
 ---@field new_ctx NavCtxID
----@field nav_id NavID
 ---
 ---@class NavCtxCleanupData
 ---@field ctx_id NavCtxID
@@ -46,11 +45,9 @@ local navigation = {}
 ---@field position number
 ---
 ---@class NavPosChangedData
----@field nav_id NavID
 ---@field pos number
 ---@field old_pos number
----@field columns number
----@field total_items number
+---@field ctx_id NavCtxID
 ---
 ---@class NavToData: NavState
 ---@field ctx_id NavCtxID
@@ -203,11 +200,9 @@ local function safe_navigate(direction, state, increment)
     state.position = get_position_wrap(state, increment)
 
     events.emit('nav.pos_changed', {
-        nav_id = clean_nav_id(get_current_nav_id()),
         pos = state.position,
         old_pos = old_position,
-        columns = state.columns,
-        total_items = state.total_items,
+        ctx_id = get_current_ctx_id(),
     } --[[@as NavPosChangedData]])
 end
 
@@ -479,7 +474,6 @@ local handlers = {
         events.emit('nav.context_pushed', {
             old_ctx = old_ctx or '',
             new_ctx = data.ctx_id,
-            nav_id = '',
         } --[[@as NavCtxPushedData]])
     end,
 
@@ -502,7 +496,6 @@ local handlers = {
         events.emit('nav.context_popped', {
             old_ctx = data.ctx_id,
             new_ctx = nav_ctx_stack[#nav_ctx_stack] or '',
-            nav_id = clean_nav_id(get_current_nav_id()),
         } --[[@as NavCtxPoppedData]])
     end,
 
@@ -524,7 +517,6 @@ local handlers = {
         events.emit('nav.context_cleaned', {
             old_ctx = data.ctx_id,
             new_ctx = nav_ctx_stack[#nav_ctx_stack] or '',
-            nav_id = clean_nav_id(get_current_nav_id()),
         } --[[@as NavCtxCleanedData]])
     end,
 
