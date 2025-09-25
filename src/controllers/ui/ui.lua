@@ -143,7 +143,7 @@ end
 ---@return UiMode|nil
 local function validate_mode(event_name, data)
     if not data or not data.mode then
-        hh_utils.emit_data_error(event_name, data)
+        hh_utils.emit_data_error(event_name, data, 'ui')
         return nil
     end
 
@@ -165,7 +165,7 @@ local function make_mode_registration_handler(on_success)
     ---@param data UiModeData|EventData|nil
     return function(event_name, data)
         if not data or not data.mode or type(data.mode) ~= 'string' then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'ui')
             return nil
         end
 
@@ -210,7 +210,7 @@ end
 ---@return UiOverlay|nil
 local function validate_overlay(event_name, data)
     if not data or not data.overlay then
-        hh_utils.emit_data_error(event_name, data)
+        hh_utils.emit_data_error(event_name, data, 'ui')
         return nil
     end
 

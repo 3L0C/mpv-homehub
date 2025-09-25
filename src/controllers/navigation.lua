@@ -325,7 +325,7 @@ local handlers = {
         end
 
         if not hh_utils.is_valid_nav_to_data(data) then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'navigation')
             return
         end
 
@@ -455,7 +455,7 @@ local handlers = {
     ---@param data NavCtxPushData|EventData|nil
     ['nav.context_push'] = function(event_name, data)
         if not data or not data.ctx_id then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'navigation')
             return
         end
 
@@ -482,7 +482,7 @@ local handlers = {
     ---@param data NavCtxPopData|EventData|nil
     ['nav.context_pop'] = function(event_name, data)
         if not data or not data.ctx_id then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'navigation')
             return
         end
 
@@ -503,7 +503,7 @@ local handlers = {
     ---@param data NavCtxCleanupData|EventData|nil
     ['nav.context_cleanup'] = function(event_name, data)
         if not data or not data.ctx_id then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'navigation')
             return
         end
 

@@ -30,8 +30,9 @@ end
 ---Wrapper for `events.emit('msg.error.navigation')` when data is invalid.
 ---@param event_name EventName
 ---@param data EventData|nil
-function hh_utils.emit_data_error(event_name, data)
-    events.emit('msg.error.navigation', { msg = {
+---@param controller string
+function hh_utils.emit_data_error(event_name, data, controller)
+    events.emit('msg.error.' .. controller, { msg = {
         ("Received invalid data to '%s' request:"):format(event_name),
         utils.to_string(data)
     } })

@@ -88,7 +88,7 @@ local handlers = {
     ---@param data NavCtxPushedData|EventData|nil
     ['nav.context_pushed'] = function(event_name, data)
         if not data or not data.old_ctx or not data.new_ctx then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'ui_text')
             return
         end
 
@@ -116,7 +116,7 @@ local handlers = {
     ---@param data NavToData|EventData|nil
     ['nav.navigated_to'] = function(event_name, data)
         if not data or not hh_utils.is_valid_nav_to_data(data) then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'ui_text')
             return
         end
 
@@ -133,7 +133,7 @@ local handlers = {
     ---@param data NavPosChangedData|EventData|nil
     ['nav.pos_changed'] = function(event_name, data)
         if not data or not data.pos or not data.old_pos or not data.ctx_id then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'ui_text')
             return
         end
 
@@ -150,7 +150,7 @@ local handlers = {
     ---@param data ContentLoadedData|EventData|nil
     ['content.loaded'] = function(event_name, data)
         if not data then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'ui_text')
             return
         end
 
@@ -163,7 +163,7 @@ local handlers = {
     ---@param data ContentLoadingData|EventData|nil
     ['content.loading'] = function(event_name, data)
         if not data or not data.ctx_id then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'ui_text')
             return
         end
 
@@ -178,7 +178,7 @@ local handlers = {
     ---@param data ContentErrorData|EventData|nil
     ['content.error'] = function(event_name, data)
         if not data or not data.ctx_id then
-            hh_utils.emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data, 'ui_text')
             return
         end
 
