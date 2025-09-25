@@ -29,6 +29,8 @@ local options = {
     ui_autostart = false,
 
     -- default ui text mode keys
+    -- TODO refactor this into individual key value pairs so mpv can use `read_options`.
+    -- value would be a comma separated list of keys. Need util function to split/convert.
     ---@type DefaultKeyTable
     ui_text_keys = {
         up = {
