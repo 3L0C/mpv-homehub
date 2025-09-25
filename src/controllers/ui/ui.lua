@@ -137,23 +137,13 @@ local function open_at_start()
     end
 end
 
----Wrapper for `events.emit('msg.error.ui')` when data is invalid.
----@param event_name EventName
----@param data any
-local function emit_data_error(event_name, data)
-    events.emit('msg.error.ui', { msg = {
-        ("Received invalid data to '%s' request:"):format(event_name),
-        utils.to_string(data)
-    } })
-end
-
 ---Validate a mode event before mutating state.
 ---@param event_name EventName
 ---@param data UiModeData|EventData|nil
 ---@return UiMode|nil
 local function validate_mode(event_name, data)
     if not data or not data.mode then
-        emit_data_error(event_name, data)
+        hh_utils.emit_data_error(event_name, data)
         return nil
     end
 
@@ -175,7 +165,7 @@ local function make_mode_registration_handler(on_success)
     ---@param data UiModeData|EventData|nil
     return function(event_name, data)
         if not data or not data.mode or type(data.mode) ~= 'string' then
-            emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data)
             return nil
         end
 
@@ -220,7 +210,7 @@ end
 ---@return UiOverlay|nil
 local function validate_overlay(event_name, data)
     if not data or not data.overlay then
-        emit_data_error(event_name, data)
+        hh_utils.emit_data_error(event_name, data)
         return nil
     end
 

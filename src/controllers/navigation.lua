@@ -211,38 +211,12 @@ local function safe_navigate(direction, state, increment)
     } --[[@as NavPosChangedData]])
 end
 
----Get valid NavToData for `nav.navigate_to` request.
----@param data NavToData|EventData|nil
----@return boolean
-local function is_valid_nav_to_data(data)
-    return type(data) == 'table'
-        and type(data.ctx_id) == 'string'
-        and type(data.nav_id) == 'string'
-        and type(data.columns) == 'number'
-        and type(data.position) == 'number'
-        and type(data.total_items) == 'number'
-        and data.columns >= 1
-        and data.position >= 0
-        and data.total_items >= 0
-        and (data.total_items == 0 or data.position <= data.total_items)
-end
-
 ---Test if `ctx_id` is the current context.
 ---If we are not in a context, insert `ctx_id` and return true.
 ---@param ctx_id NavCtxID
 ---@return boolean
 local function in_context(ctx_id)
     return nav_ctx_stack[#nav_ctx_stack] == ctx_id
-end
-
----Wrapper for `events.emit('msg.error.navigation')` when data is invalid.
----@param event_name EventName
----@param data EventData|nil
-local function emit_data_error(event_name, data)
-    events.emit('msg.error.navigation', { msg = {
-        ("Received invalid data to '%s' request:"):format(event_name),
-        utils.to_string(data)
-    } })
 end
 
 ---Helper to emit a selection type event.
@@ -355,8 +329,8 @@ local handlers = {
             return
         end
 
-        if not is_valid_nav_to_data(data) then
-            emit_data_error(event_name, data)
+        if not hh_utils.is_valid_nav_to_data(data) then
+            hh_utils.emit_data_error(event_name, data)
             return
         end
 
@@ -486,7 +460,7 @@ local handlers = {
     ---@param data NavCtxPushData|EventData|nil
     ['nav.context_push'] = function(event_name, data)
         if not data or not data.ctx_id then
-            emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data)
             return
         end
 
@@ -514,7 +488,7 @@ local handlers = {
     ---@param data NavCtxPopData|EventData|nil
     ['nav.context_pop'] = function(event_name, data)
         if not data or not data.ctx_id then
-            emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data)
             return
         end
 
@@ -536,7 +510,7 @@ local handlers = {
     ---@param data NavCtxCleanupData|EventData|nil
     ['nav.context_cleanup'] = function(event_name, data)
         if not data or not data.ctx_id then
-            emit_data_error(event_name, data)
+            hh_utils.emit_data_error(event_name, data)
             return
         end
 

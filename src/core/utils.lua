@@ -11,6 +11,32 @@ local events = require 'src.core.events'
 ---@class hh_utils
 local hh_utils = {}
 
+---Get valid NavToData for `nav.navigate_to` request.
+---@param data any
+---@return boolean
+function hh_utils.is_valid_nav_to_data(data)
+    return type(data) == 'table'
+        and type(data.ctx_id) == 'string'
+        and type(data.nav_id) == 'string'
+        and type(data.columns) == 'number'
+        and type(data.position) == 'number'
+        and type(data.total_items) == 'number'
+        and data.columns >= 1
+        and data.position >= 0
+        and data.total_items >= 0
+        and (data.total_items == 0 or data.position <= data.total_items)
+end
+
+---Wrapper for `events.emit('msg.error.navigation')` when data is invalid.
+---@param event_name EventName
+---@param data EventData|nil
+function hh_utils.emit_data_error(event_name, data)
+    events.emit('msg.error.navigation', { msg = {
+        ("Received invalid data to '%s' request:"):format(event_name),
+        utils.to_string(data)
+    } })
+end
+
 ---Key bind helper.
 ---@param keys string[]
 ---@param event_name EventName
