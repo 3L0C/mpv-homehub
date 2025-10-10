@@ -60,7 +60,8 @@ local handlers = {
         events.emit('nav.context_push', { ctx_id = 'text' } --[[@as NavCtxPushData]])
         events.emit('content.request', {
             ctx_id = 'text',
-            location = 'root',
+            nav_id = '',
+            selection = 0,
         } --[[@as ContentRequestData]])
         events.emit('ui.activated_mode', { mode = 'text' } --[[@as UiModeData]])
     end,
@@ -125,7 +126,8 @@ local handlers = {
 
         events.emit('content.request', {
             ctx_id = 'text',
-            location = data.nav_id,
+            nav_id = data.nav_id,
+            selection = data.position,
         } --[[@as ContentRequestData]])
     end,
 

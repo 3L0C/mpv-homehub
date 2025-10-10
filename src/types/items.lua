@@ -9,3 +9,9 @@
 ---@field style_variant? 'default'|'accent'|'secondary'|'muted'
 ---@field highlight? boolean
 ---@field indent_level? number Visual indentation level (0-based)
+---
+---Represents the items passed to the gallery view.
+---@class GalleryItem: TextItem
+---
+---Represents an item returned by a provider.
+---@class Item: GalleryItem

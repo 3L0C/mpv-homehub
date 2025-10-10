@@ -1,0 +1,53 @@
+---@meta _
+
+---@alias AdapterID string
+---
+---@class Adapter
+---
+---@class AdapterConfig
+---@field id string Unique identifier.
+---@field display_name string UI display name
+---@field [string] any Provider-specific configuration options.
+---
+---@alias MediaType 'video'|'audio'|'other'
+---
+---Represents event mappings between the content controller and an adapter.
+---@class AdapterEventMap
+---@field request string
+---@field back string
+---@field navigate_to string
+---@field search? string
+---@field action? string
+---@field status? string
+---@field error? string
+---
+---Represents the capabilities supported by an Adapter.
+---@class AdapterCapabilities
+---@field supports_search boolean
+---@field supports_thumbnails boolean
+---@field media_types MediaType[]
+---
+---Represents the Adapter API for communication between adapters, and the content controller.
+---@class AdapterAPI
+---@field adapter_id AdapterID
+---@field adapter_name string Human readable adapter name.
+---@field adapter_type 'jellyfin'|'plex'|'emby'|'subsonic'|'other'
+---@field events AdapterEventMap
+---@field capabilities AdapterCapabilities
+---
+---Represents the data sent during an adapter request event.
+---@class AdapterRequestData
+---@field ctx_id NavCtxID 
+---@field nav_id NavID
+---@field adapter_id AdapterID
+---
+---Represents the data sent during an adapter navigate to event.
+---@class AdapterNavToData
+---@field ctx_id NavCtxID
+---@field nav_id NavID
+---@field selection number
+---
+---Represents the data sent during an adapter error event.
+---@class AdapterErrorData
+---@field adapter_id AdapterID
+---@field error? string 

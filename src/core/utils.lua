@@ -11,6 +11,28 @@ local events = require 'src.core.events'
 ---@class hh_utils
 local hh_utils = {}
 
+---Encode adapter_id and adapter_nav_id into a content controller nav_id.
+---Format: "adapter_id://adapter_nav_id"
+---@param adapter_id AdapterID
+---@param adapter_nav_id NavID The nav_id in the adapter's context
+---@return NavID content_nav_id The nav_id in the content controller's context
+function hh_utils.encode_content_nav_id(adapter_id, adapter_nav_id)
+    return adapter_id .. '://' .. (adapter_nav_id or '')
+end
+
+---Decode content controller nav_id into adapter_id and adapter_nav_id.
+---Format: "adapter_id://adapter_nav_id"
+---@param content_nav_id NavID The nav_id in the content controller's context
+---@return AdapterID adapter_id
+---@return NavID adapter_nav_id The nav_id in the adapter's context
+function hh_utils.decode_content_nav_id(content_nav_id)
+    if not content_nav_id or content_nav_id == '' then
+        return '', ''
+    end
+    local adapter_id, adapter_nav_id = content_nav_id:match('^(.-)://(.*)$')
+    return adapter_id or '', adapter_nav_id or ''
+end
+
 ---Get valid NavToData for `nav.navigate_to` request.
 ---@param data any
 ---@return boolean

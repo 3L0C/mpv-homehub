@@ -1,0 +1,24 @@
+---@meta _
+
+---@class ContentRequestData
+---@field ctx_id NavCtxID
+---@field nav_id NavID
+---@field selection number
+---
+---@class ContentLoadingData
+---@field ctx_id NavCtxID
+---@field nav_id NavID
+---@field adapter_id AdapterID 
+---
+---@class ContentLoadedData
+---@field ctx_id NavCtxID
+---@field nav_id NavID
+---@field items Item[]
+---
+---@class ContentErrorData
+---@field ctx_id NavCtxID
+---@field nav_id NavID 
+---@field msg string
+---@field adapter_id AdapterID 
+---@field error_type string
+---@field recoverable boolean 
