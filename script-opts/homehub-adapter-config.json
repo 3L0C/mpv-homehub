@@ -1,0 +1,11 @@
+[
+    {
+        "id": "jellyfin",
+        "display_name": "Jellyfin",
+        "type": "jellyfin",
+        "enabled": true,
+        "url": "https://jellyfin.example.com",
+        "username": "user",
+        "password": "pass"
+    }
+]

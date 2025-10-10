@@ -96,6 +96,9 @@ local options = {
     -- Layout
     scaling_factor_body = 1,
     screen_margin_ratio = 0.05,  -- 5% margins on top/bottom like gallery-view's 90%
+
+    -- Adapter configuration
+    adapter_config_file = '~~/script-opts/homehub-adapter-config.json',
 }
 
 function options.init()

@@ -3,11 +3,20 @@
 ---@alias AdapterID string
 ---
 ---@class Adapter
+---@field api_version string Semantic version (e.g., '1.0.0')
+---@field init fun(config: AdapterConfig): boolean Initialize the adapter
+---@field cleanup fun() Cleanup adapter resources
 ---
 ---@class AdapterConfig
----@field id string Unique identifier.
----@field display_name string UI display name
----@field [string] any Provider-specific configuration options.
+---@field id string Unique identifier for this adapter instance
+---@field display_name string Human-readable name for UI display
+---@field type 'jellyfin'|'emby'|'plex'|'subsonic'|'other' Adapter type
+---@field external? boolean Whether this adapter is external or not (default: false)
+---@field enabled? boolean Whether this adapter should be loaded (default: true)
+---@field url? string Base URL for the media server
+---@field username? string Username for authentication
+---@field password? string Password for authentication
+---@field file_path? string Path to external adapter script (overrides default path)
 ---
 ---@alias MediaType 'video'|'audio'|'other'
 ---
