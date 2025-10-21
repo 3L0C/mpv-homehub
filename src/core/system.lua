@@ -35,8 +35,11 @@ end
 function system.init()
     --minimum mpv version checks
     assert(mp.create_osd_overlay, 'HomeHub requires minimum mpv version v0.33')
-    events.on('sys.*', handler, 'system')
+    for event in pairs(handlers) do
+        events.on(event, handler, 'system')
+    end
     events.on('sys.cleanup', system.cleanup, 'system')
+    events.emit('sys.prep')
     events.emit('sys.ready')
 end
 

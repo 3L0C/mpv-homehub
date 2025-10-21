@@ -8,16 +8,6 @@ local events = require "src.core.events"
 local hh_utils = require 'src.core.utils'
 local options = require "src.core.options"
 
----Types
----@alias UiMode string
----@alias UiOverlay string
----
----@class UiModeData
----@field mode UiMode
----
----@class UiOverlayData
----@field overlay UiOverlay
-
 ---@class ui: Controller
 local ui = {}
 
@@ -40,6 +30,14 @@ local ui_state = {
     -- Transition state
     transitioning = false,
 }
+
+---Bind UI keys
+local function bind_keys()
+end
+
+---Unbind UI keys
+local function unbind_keys()
+end
 
 ---Initialize `ui_state`.
 local function reset_ui_state()
@@ -406,6 +404,7 @@ function ui.init()
     for event in pairs(handlers) do
         events.on(event, handler, 'ui')
     end
+    bind_keys()
 end
 
 function ui.cleanup()
@@ -417,6 +416,7 @@ function ui.cleanup()
 
     events.emit('ui.deactivate_mode')
     reset_ui_state()
+    unbind_keys()
 end
 
 return ui

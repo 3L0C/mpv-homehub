@@ -12,32 +12,28 @@ local content_state = {
     -- Registered adapters
     ---@type table<AdapterID,AdapterAPI>
     adapter_apis = {},
-
-    -- Active adapters
-    ---@type Set<AdapterID>
-    active_adapters = {},
 }
 
 ---Get adapter API by adapter_id.
 ---@param adapter_id AdapterID
 ---@return AdapterAPI?
 local function get_adapter_api(adapter_id)
-    -- The adapter_id might be the specific instance (e.g., 'jellyfin_main')
-    -- or the adapter type (e.g., 'jellyfin')
     return content_state.adapter_apis[adapter_id]
 end
 
----Get active adapter ids.
+---Get registered adapter ids.
 ---@return AdapterID[]
-local function get_active_adapter_ids()
+local function get_registered_adapter_ids()
     ---@type AdapterID[]
     local ids = {}
 
-    for id, is_active in pairs(content_state.active_adapters) do
-        if is_active then
+    for id, api in pairs(content_state.adapter_apis) do
+        if api then
             table.insert(ids, id)
         end
     end
+
+    table.sort(ids)
 
     return ids
 end
@@ -77,14 +73,14 @@ local function handle_adapter_root_request(ctx_id, adapter_id)
 end
 
 
----Request root content from all active adapters.
+---Request root content from all registered adapters.
 ---@param ctx_id NavCtxID
 local function handle_root_request(ctx_id)
-    local adapter_ids = get_active_adapter_ids()
+    local adapter_ids = get_registered_adapter_ids()
 
     if #adapter_ids == 0 then
         events.emit('msg.warn.content', { msg = {
-            'Unable to access root content, no active adapters.'
+            'Unable to access root content, no registered adapters.'
         } })
         return
     elseif #adapter_ids == 1 then
@@ -92,34 +88,29 @@ local function handle_root_request(ctx_id)
         return
     end
 
+    -- Multiple adapters - create menu
     ---@type Item[]
     local items = {}
     for _, adapter_id in ipairs(adapter_ids) do
         local api = get_adapter_api(adapter_id)
-        if not api then
-            events.emit('msg.error.content', { msg = {
-                'Active adapter with no api:', adapter_id,
-            } })
-            content_state.active_adapters[adapter_id] = false
-        else
+        if api then
             table.insert(items, {
                 primary_text = api.adapter_name,
                 secondary_text = api.adapter_type,
-                -- Could add icons an such later...
+                -- Could add icons and such later...
             } --[[@as Item]])
         end
     end
 
     if #items == 0 then
+        events.emit('msg.warn.content', { msg = {
+            'No valid adapters found for root menu.'
+        } })
         return
     elseif #items == 1 then
-        -- This should not create an infinite recursion because we deactivated
-        -- adapters with no api. This should leave us with a single adapter_id
-        -- when we next call `get_active_adapter_ids()`.
-        adapter_ids = get_active_adapter_ids()
-        if #adapter_ids == 1 then
-            handle_root_request(ctx_id)
-        end
+        -- Edge case: multiple adapter_ids but only one valid API
+        -- Just go directly to that adapter
+        handle_adapter_root_request(ctx_id, adapter_ids[1])
         return
     end
 
@@ -134,7 +125,7 @@ end
 ---@param ctx_id NavCtxID
 ---@param selection number
 local function handle_adapter_selection(ctx_id, selection)
-    local adapter_ids = get_active_adapter_ids()
+    local adapter_ids = get_registered_adapter_ids()
 
     if selection < 1 or selection > #adapter_ids then
         events.emit('content.error', {
@@ -169,7 +160,7 @@ local function handle_adapter_selection(ctx_id, selection)
 
     events.emit('content.loading', {
         ctx_id = ctx_id,
-        nav_id = hh_utils.encode_content_nav_id(adapter_id, ''),
+        nav_id = hh_utils.encode_nav_id(adapter_id, ''),
         adapter_id = adapter_id,
     } --[[@as ContentLoadingData]])
 
@@ -185,7 +176,8 @@ end
 ---@param nav_id string
 ---@param selection number
 local function handle_navigation_request(ctx_id, nav_id, selection)
-    local adapter_id, adapter_nav_id = hh_utils.decode_content_nav_id(nav_id)
+    local nav_id_parts = hh_utils.decode_nav_id(nav_id)
+    local adapter_id, adapter_nav_id = nav_id_parts.prefix, nav_id_parts.rest
 
     if adapter_id == '' then
         events.emit('content.error', {
@@ -225,6 +217,7 @@ local function handle_navigation_request(ctx_id, nav_id, selection)
     events.emit(api.events.navigate_to, {
         ctx_id = ctx_id,
         nav_id = adapter_nav_id,
+        adapter_id = api.adapter_id,
         selection = selection,
     } --[[@as AdapterNavToData]])
 end
@@ -232,31 +225,59 @@ end
 ---@type HandlerTable
 local handlers = {
 
-    -- Content requests from UI
+    -- Content requests from Navigation controller
 
     ---@param event_name EventName
     ---@param data ContentRequestData|EventData|nil
     ['content.request'] = function(event_name, data)
-        if not data or not data.ctx_id then
+        if not data or not data.ctx_id or not data.nav_id then
             hh_utils.emit_data_error(event_name, data, 'content')
             return
         end
 
-        if not data.nav_id or data.nav_id == '' then
-            if not data.selection or data.selection == 0 then
-                handle_root_request(data.ctx_id)
-            else
-                handle_adapter_selection(data.ctx_id, data.selection)
-            end
+        if data.nav_id == '' then
+            handle_root_request(data.ctx_id)
+            return
+        end
+
+        local nav_id_parts = hh_utils.decode_nav_id(data.nav_id)
+        local adapter_id, adapter_nav_id = nav_id_parts.prefix, nav_id_parts.rest
+        local api = get_adapter_api(adapter_id)
+        if not api then
+            events.emit('content.error', {
+                ctx_id = data.ctx_id,
+                nav_id = adapter_nav_id,
+                msg = 'Adapter not available: ' .. adapter_id,
+                adapter_id = adapter_id,
+                error_type = 'adapter_not_found',
+                recoverable = false,
+            } --[[@as ContentErrorData]])
+            return
+        end
+
+        events.emit(api.events.request, {
+            ctx_id = data.ctx_id,
+            nav_id = adapter_nav_id,
+            adapter_id = adapter_id,
+        } --[[@as AdapterRequestData]])
+    end,
+
+    ---@param event_name EventName
+    ---@param data ContentNavToData|EventData|nil
+    ['content.navigate_to'] = function (event_name, data)
+        if not data or not data.ctx_id or not data.nav_id or not data.selection then
+            hh_utils.emit_data_error(event_name, data, 'content')
+            return
+        end
+
+        if data.nav_id == '' then
+            handle_adapter_selection(data.ctx_id, data.selection)
         else
-            -- Navigate to specific location
-            -- TODO: handle missing selection
-            handle_navigation_request(data.ctx_id, data.nav_id, data.selection or 1)
+            handle_navigation_request(data.ctx_id, data.nav_id, data.selection)
         end
     end,
 
     -- Adapter registration and lifecycle events
-    -- (Called by adapters, not by content controller)
 
     ---@param event_name EventName
     ---@param data AdapterAPI|EventData|nil
@@ -280,43 +301,27 @@ local handlers = {
 
     ---@param event_name EventName
     ---@param data AdapterAPI|EventData|nil
-    ['content.adapter_activate'] = function(event_name, data)
+    ['content.unregister_adapter'] = function(event_name, data)
         if not data or not data.adapter_id then
             hh_utils.emit_data_error(event_name, data, 'content')
             return
         end
 
-        events.emit('msg.info.content', { msg = {
-            'Adapter ready:', data.adapter_id
-        } })
-
-        -- Set as active
-        content_state.active_adapters[data.adapter_id] = true
-    end,
-
-    ---@param event_name EventName
-    ---@param data AdapterAPI|EventData|nil
-    ['content.adapter_deactivate'] = function (event_name, data)
-        if not data or not data.adapter_id then
-            hh_utils.emit_data_error(event_name, data, 'content')
-            return
-        end
-
-        if content_state.active_adapters[data.adapter_id] then
+        if content_state.adapter_apis[data.adapter_id] then
             events.emit('msg.info.content', { msg = {
-                'Deactivating adapter:', data.adapter_id
+                'Unregistering adapter:', data.adapter_id
             } })
-            content_state.active_adapters[data.adapter_id] = false
+            content_state.adapter_apis[data.adapter_id] = nil
         else
             events.emit('msg.warn.content', { msg = {
-                'Deactivation request for inactive adapter:', data.adapter_id
+                'Unregister request for unknown adapter:', data.adapter_id
             } })
         end
     end,
 
     ---@param event_name EventName
     ---@param data AdapterErrorData|EventData|nil
-    ['content.adapter_error'] = function (event_name, data)
+    ['content.adapter_error'] = function(event_name, data)
         if not data or not data.adapter_id then
             hh_utils.emit_data_error(event_name, data, 'content')
             return

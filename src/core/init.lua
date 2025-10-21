@@ -5,22 +5,24 @@
 -- System initialization and module loading
 local options = require 'src.core.options'
 local events = require 'src.core.events'
-local system = require 'src.controllers.system'
+local system = require 'src.core.system'
 
 -- Load MVC components
 ---@type table<string,Controller>
 local controllers = {
-    auth = require 'src.controllers.auth',
+    content = require 'src.controllers.content',
     input = require 'src.controllers.input',
-    media = require 'src.controllers.media',
     messenger = require 'src.controllers.messenger',
     navigation = require 'src.controllers.navigation',
-    plugin = require 'src.controllers.plugin',
-    search = require 'src.controllers.search',
     ui = require 'src.controllers.ui.ui',
+    text = require 'src.controllers.ui.text',
 }
 
--- Load adapters
+---@type table<string,View>
+local views = {
+    text_renderer = require 'src.views.text.renderer',
+}
+
 local adapter_manager = require 'src.models.base.adapter'
 
 return {
@@ -32,6 +34,11 @@ return {
         -- Initialize controllers
         for _, controller in pairs(controllers) do
             controller.init()
+        end
+
+        -- Initialize views
+        for _, view in pairs(views) do
+            view.init()
         end
 
         -- Load configured adapters

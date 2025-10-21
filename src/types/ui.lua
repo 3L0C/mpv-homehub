@@ -1,0 +1,10 @@
+---@meta _
+---
+---@alias UiMode string
+---@alias UiOverlay string
+---
+---@class UiModeData
+---@field mode UiMode
+---
+---@class UiOverlayData
+---@field overlay UiOverlay

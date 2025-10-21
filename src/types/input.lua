@@ -1,0 +1,28 @@
+---@meta _
+---
+---@alias InputKey string
+---@alias InputCtx EventData
+---@alias InputGroup string
+---
+---@class InputFlags
+---@field repeatable boolean?
+---@field scalable boolean?
+---@field complex boolean?
+---
+---@class InputBind
+---@field key InputKey
+---@field event EventName
+---@field group InputGroup
+---@field name string
+---@field ctx InputCtx
+---@field flags? InputFlags
+---
+---@class InputData
+---@field key InputKey
+---@field event EventName
+---@field group InputGroup 
+---@field ctx InputCtx
+---@field flags InputFlags
+---
+---@class InputUnbindData
+---@field group InputGroup

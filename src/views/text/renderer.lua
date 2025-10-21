@@ -12,7 +12,7 @@ local options  = require 'src.core.options'
 ---Represents the data sent to the `text_renderer.render` event.
 ---This is the primary interface for requesting text rendering updates.
 ---@class TextRendererRenderData
----@field items? TextItem[] Array of display items to render
+---@field items? Item[] Array of display items to render
 ---@field cursor_pos? number Visual cursor position
 ---@field selection? Set<number> Selection state mapping
 ---@field force_update? boolean Force refresh even if no changes detected
@@ -36,7 +36,7 @@ local renderer_state = {
     initialized = false,
 
     -- Content state
-    ---@type TextItem[]
+    ---@type Item[]
     display_items = {},
     empty_text = 'No items available.',
 
@@ -269,7 +269,7 @@ local function render_cursor(position)
 end
 
 ---Render a single display item with enhanced styling support
----@param item TextItem
+---@param item Item
 ---@param position number
 local function render_item(item, position)
     -- Apply base body style

@@ -1,0 +1,20 @@
+---@meta _
+---
+---@alias EventName string
+---@alias EventData table<unknown,unknown>
+---@alias ListenerCB fun(event_name: string, data?: EventData): nil
+---@alias ComponentName string
+---
+---@class Listener
+---@field callback ListenerCB
+---@field component string Registered component name.
+---
+---@class TrackedListener
+---@field type 'wildcard'|'event'
+---@field identifier string For wildcard or event type
+---@field listener Listener
+---
+---@class EventState
+---@field listeners table<EventName,Listener[]>
+---@field wildcards table<EventName,Listener[]>
+---@field components table<ComponentName,TrackedListener[]>

@@ -4,19 +4,6 @@
 
 local opt = require 'mp.options'
 
----@class DefaultKeyTable
----@field up string[]
----@field down string[]
----@field left string[]
----@field right string[]
----@field search string[]
----@field help string[]
----@field back string[]
----@field select string[]
----@field multiselect string[]
----@field page_up string[]
----@field page_down string[]
-
 ---@class options
 local options = {
     -- directory to load external modules - currently only user-input-module
@@ -28,50 +15,8 @@ local options = {
     ---@type boolean
     ui_autostart = false,
 
-    -- default ui text mode keys
-    -- TODO refactor this into individual key value pairs so mpv can use `read_options`.
-    -- value would be a comma separated list of keys. Need util function to split/convert.
-    ---@type DefaultKeyTable
-    ui_text_keys = {
-        up = {
-            'UP',
-        },
-        down = {
-            'DOWN',
-        },
-        -- no concept of 'left'|'right' in a single column list, use back|select instead...
-        left = {
-            '',
-        },
-        right = {
-            '',
-        },
-        search = {
-            '/',
-        },
-        help = {
-            '?',
-        },
-        back = {
-            'LEFT',
-        },
-        select = {
-            'RIGHT',
-            'ENTER',
-        },
-        multiselect = {
-            'CTRL+ENTER',
-            'SPACE',
-        },
-        page_up = {
-            'PGUP',
-            'CTRL+UP'
-        },
-        page_down = {
-            'PGDWN',
-            'CTRL+DOWN'
-        },
-    },
+    -- UI keybinds
+    ui_keybinds_file = '~~/script-opts/homehub-keybinds.json',
 
     -- ASS configuration
 
@@ -98,7 +43,7 @@ local options = {
     screen_margin_ratio = 0.05,  -- 5% margins on top/bottom like gallery-view's 90%
 
     -- Adapter configuration
-    adapter_config_file = '~~/script-opts/homehub-adapter-config.json',
+    adapter_config_file = '~~/script-opts/homehub-adapters.json',
 }
 
 function options.init()

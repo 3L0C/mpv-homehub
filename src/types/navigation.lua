@@ -1,0 +1,86 @@
+---@meta _
+---
+-- ============================================================================
+-- Core Navigation Types
+-- ============================================================================
+---
+---Navigation state for a specific location
+---@class NavState
+---@field columns number Number of columns in grid layout (1 for list)
+---@field position number Current cursor position (1-indexed)
+---@field total_items number Total number of items at this location
+---
+---@alias NavID string Encoded navigation identifier (ctx_id://location)
+---@alias NavCtxID string Navigation context identifier (e.g., 'text', 'search')
+---
+---Internal navigation tables
+---@alias NavIDTable table<NavID, NavState>
+---@alias NavCtxTable table<NavCtxID, NavID[]>
+---@alias NavCtxStack NavCtxID[]
+---
+-- ============================================================================
+-- Navigation Events (Commands → System)
+-- ============================================================================
+---
+---Request to navigate to a location
+---@class NavNavigateToData
+---@field ctx_id NavCtxID
+---@field nav_id string Decoded nav_id (without ctx_id prefix)
+---@field columns number
+---@field position number 0 = auto/default, >0 = specific position
+---@field total_items number
+---
+-- ============================================================================
+-- Navigation Events (System → Listeners)
+-- ============================================================================
+---
+---Notification that navigation occurred
+---@class NavNavigatedToData
+---@field ctx_id NavCtxID
+---@field nav_id string Decoded nav_id
+---@field columns number
+---@field position number Actual position (never 0)
+---@field total_items number
+---@field trigger 'navigate_to'|'back' What caused this navigation
+---
+---Notification that cursor position changed within same location
+---@class NavPositionChangedData
+---@field ctx_id NavCtxID
+---@field position number New position
+---@field old_position number Previous position
+---
+---Notification that user selected an item
+---@class NavSelectedData
+---@field ctx_id NavCtxID
+---@field nav_id string Current location
+---@field position number Selected item position
+---
+-- ============================================================================
+-- Context Management Events
+-- ============================================================================
+---
+---Request to push a new context onto the stack
+---@class NavContextPushData
+---@field ctx_id NavCtxID
+---
+---Request to pop current context from stack
+---@class NavContextPopData
+---@field ctx_id NavCtxID Must match current context
+---
+---Request to cleanup a context (error recovery)
+---@class NavContextCleanupData
+---@field ctx_id NavCtxID
+---
+---Notification that context changed
+---@class NavContextChangedData
+---@field old_ctx NavCtxID Previous context (empty if none)
+---@field new_ctx NavCtxID Current context
+---
+-- ============================================================================
+-- Utility Types
+-- ============================================================================
+---
+---Parsed nav_id components
+---@class NavIDParts
+---@field prefix string Context/adapter prefix
+---@field rest string Remainder of nav_id

@@ -4,9 +4,9 @@
 
 local mp = require 'mp'
 local msg = require 'mp.msg'
-local utils = require 'mp.utils'
 
 local events = require 'src.core.events'
+local hh_utils = require 'src.core.utils'
 local options = require 'src.core.options'
 
 ---@class adapter_manager
@@ -97,7 +97,7 @@ local function create_adapter_environment(adapter_id)
     env.package.loaded = redirect_table(env.package.loaded)
 
     -- Create namespaced message module
-    local name_tag = string.format('[%s]', adapter_id)
+    local name_tag = ('[%s]'):format(adapter_id)
     local msg_module = {
         log = function(level, ...) msg.log(level, name_tag, ...) end,
         fatal = function(...) return msg.fatal(name_tag, ...) end,
@@ -192,7 +192,7 @@ local function get_adapter_file_path(config)
         return nil
     end
 
-    return script_dir .. '/src/models/adapters/' .. config.type .. '.lua'
+    return script_dir .. '/src/models/adapters/' .. config.type .. '/main.lua'
 end
 
 ---Load a specific adapter
@@ -309,27 +309,16 @@ function adapter_manager.load_adapters()
         return
     end
 
-    local path = mp.command_native({'expand-path', options.adapter_config_file}) --[[@as string]]
-    local adapter_config, err = io.open(path)
-    if not adapter_config then
-        events.emit('msg.warn.adapter', { msg = {
-            'Could not read adapter configuration:', err
-        } })
-        return
-    end
-
-    local json = adapter_config:read('*a')
-    adapter_config:close()
-
-    json = utils.parse_json(json)
-    if not json or type(json) ~= 'table' then
+    ---@type AdapterConfig[]?, string?
+    local adapter_configs, err = hh_utils.read_json_file(options.adapter_config_file)
+    if not adapter_configs then
         events.emit('msg.error.adapter', { msg = {
-            'Invalid adapter config format - expected array of adapter configurations:', path
+            'Failed to load adapter configuration:', err
         } })
         return
     end
 
-    for _, config in ipairs(json --[=[@as AdapterConfig[]]=]) do
+    for _, config in ipairs(adapter_configs) do
         load_adapter(config)
     end
 end

@@ -23,7 +23,6 @@
 ---Represents event mappings between the content controller and an adapter.
 ---@class AdapterEventMap
 ---@field request string
----@field back string
 ---@field navigate_to string
 ---@field search? string
 ---@field action? string
@@ -44,6 +43,14 @@
 ---@field events AdapterEventMap
 ---@field capabilities AdapterCapabilities
 ---
+---Represents the adapter state
+---@class AdapterState
+---@field config AdapterConfig?
+---@field auth_in_progress boolean
+---@field authenticated boolean
+---@field auth_failed boolean
+---@field api AdapterAPI
+---
 ---Represents the data sent during an adapter request event.
 ---@class AdapterRequestData
 ---@field ctx_id NavCtxID 
@@ -54,6 +61,7 @@
 ---@class AdapterNavToData
 ---@field ctx_id NavCtxID
 ---@field nav_id NavID
+---@field adapter_id AdapterID 
 ---@field selection number
 ---
 ---Represents the data sent during an adapter error event.

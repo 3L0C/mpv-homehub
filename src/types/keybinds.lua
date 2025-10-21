@@ -1,0 +1,40 @@
+---@meta _
+---
+---@class DefaultKeyTable
+---@field up string[]
+---@field down string[]
+---@field left string[]
+---@field right string[]
+---@field back string[]
+---@field select string[]
+---@field multiselect string[]
+---@field page_up string[]
+---@field page_down string[]
+---@field search string[]
+---@field help string[]
+---@field toggle string[]
+---
+---Text keybind table
+---@class TextKeyTable
+---@field up string[]?
+---@field down string[]?
+---@field back string[]?
+---@field select string[]?
+---@field multiselect string[]?
+---@field page_up string[]?
+---@field page_down string[] ?
+---@field search string[]?
+---@field help string[]?
+---@field toggle string[]? 
+---
+---Gallery keybind table
+---@class GalleryKeyTable
+---
+---Search keybind table
+---@class SearchKeyTable
+---
+---Main keybind configuration class
+---@class KeybindConfig
+---@field text TextKeyTable
+---@field gallery GalleryKeyTable
+---@field search SearchKeyTable 

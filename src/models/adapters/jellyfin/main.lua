@@ -1,0 +1,365 @@
+--[[
+--  Jellyfin adapter
+--]]
+
+local events = require 'src.core.events'
+local hh_utils = require 'src.core.utils'
+
+local adapter_manager = require 'src.models.base.adapter'
+local JellyfinClient = require 'src.models.adapters.jellyfin.client'
+
+local API_VERSION = adapter_manager.get_api_version()
+
+---@class Adapter
+local adapter = {
+    api_version = API_VERSION,
+}
+
+---@class JellyfinAdapterState: AdapterState
+---@field api_client JellyfinClient|nil
+---@field current_items JellyfinItem[] 
+---
+---Registry of adapter instances
+---@type table<AdapterID, JellyfinAdapterState>
+local instances = {}
+
+---Get or create instance state
+---@param adapter_id AdapterID
+---@return JellyfinAdapterState state
+local function get_instance(adapter_id)
+    if not instances[adapter_id] then
+        instances[adapter_id] = {
+            config = nil,
+            auth_in_progress = false,
+            authenticated = false,
+            auth_failed = false,
+            api_client = nil,
+            current_items = {},
+            api = {
+                adapter_id = adapter_id,
+                adapter_name = 'Jellyfin',
+                adapter_type = 'jellyfin',
+                events = {
+                    request = adapter_id .. '.request',
+                    navigate_to = adapter_id .. '.navigate_to',
+                    search = adapter_id .. '.search',
+                    action = adapter_id .. '.action',
+                    status = adapter_id .. '.status',
+                    error = adapter_id .. '.error',
+                },
+                capabilities = {
+                    supports_search = true,
+                    supports_thumbnails = true,
+                    media_types = {
+                        'video',
+                        'audio',
+                        'other',
+                    }
+                }
+            }
+        }
+    end
+    return instances[adapter_id]
+end
+
+---Validate adapter configuration
+---@param config AdapterConfig
+---@return boolean valid
+---@return string? error_msg
+local function validate_config(config)
+    if not config then
+        return false, 'config is nil'
+    end
+
+    if type(config.id) ~= 'string' then
+        return false, 'missing or invalid id field'
+    end
+
+    if config.type ~= 'jellyfin' then
+        return false, 'type mismatch: expected "jellyfin", got "' .. tostring(config.type) .. '"'
+    end
+
+    if type(config.url) ~= 'string' then
+        return false, ("missing or invalid url field - type: '%s' value: '%s'"):format(
+            type(config.url), tostring(config.url)
+        )
+    end
+
+    return true
+end
+
+---Authenticate with the Jellyfin server
+---@param adapter_id AdapterID 
+---@return boolean success
+local function authenticate(adapter_id)
+    local state = get_instance(adapter_id)
+
+    if state.auth_in_progress then
+        return false
+    end
+
+    if state.authenticated then
+        return true
+    end
+
+    state.auth_in_progress = true
+
+    events.emit('msg.info.' .. adapter_id, { msg = {
+        'Connecting to', state.config.url
+    } })
+
+    -- Authenticate using the Jellyfin client
+    local success, err = state.api_client:authenticate(
+        state.config.username or '',
+        state.config.password or ''
+    )
+
+    state.auth_in_progress = false
+
+    if success then
+        state.authenticated = true
+        state.auth_failed = false
+
+        events.emit('msg.info.' .. adapter_id, { msg = {
+            'Successfully authenticated with Jellyfin server'
+        } })
+
+        return true
+    else
+        state.auth_failed = true
+
+        events.emit('msg.error.' .. adapter_id, { msg = {
+            'Failed to authenticate with Jellyfin server:', err or 'unknown error'
+        } })
+
+        -- Optionally unregister on permanent failure
+        -- events.emit('content.unregister_adapter', { 
+        --     adapter_id = adapter_id 
+        -- })
+
+        return false
+    end
+end
+
+---Handle content request from content controller
+---@param event_name EventName
+---@param data AdapterRequestData|EventData|nil
+local function handle_request(event_name, data)
+    if not data or not data.ctx_id or not data.nav_id or not data.adapter_id then
+        hh_utils.emit_data_error(event_name, data, 'jellyfin')
+        return
+    end
+
+    local state = get_instance(data.adapter_id)
+    local adapter_id = state.api.adapter_id
+    local nav_id = hh_utils.encode_nav_id(adapter_id, data.nav_id)
+
+    -- Lazy authentication
+    if not state.authenticated then
+        events.emit('content.loading', {
+            ctx_id = data.ctx_id,
+            nav_id = nav_id,
+            adapter_id = adapter_id,
+        } --[[@as ContentLoadingData]])
+
+        if not authenticate(adapter_id) then
+            events.emit('content.error', {
+                ctx_id = data.ctx_id,
+                nav_id = nav_id,
+                msg = 'Failed to connect to Jellyfin server',
+                adapter_id = adapter_id,
+                error_type = 'authentication_failed',
+                recoverable = true,
+            } --[[@as ContentErrorData]])
+            return
+        end
+    end
+
+    events.emit('msg.debug.' .. adapter_id, { msg = {
+        'Handling request for nav_id:', nav_id
+    } })
+
+    -- Fetch content from Jellyfin
+    local jellyfin_items, err
+    if data.nav_id == '' then
+        -- Root request - fetch libraries
+        jellyfin_items, err = state.api_client:get_views()
+    else
+        -- Fetch items in this library/folder
+        jellyfin_items, err = state.api_client:get_items(data.nav_id)
+    end
+
+    if err then
+        events.emit('content.error', {
+            ctx_id = data.ctx_id,
+            nav_id = nav_id,
+            msg = 'Failed to fetch content: ' .. err,
+            adapter_id = adapter_id,
+            error_type = 'fetch_failed',
+            recoverable = true,
+        } --[[@as ContentErrorData]])
+        return
+    end
+
+    -- Cache the fetched items
+    state.current_items = jellyfin_items or {}
+
+    -- Transform Jellyfin items to HomeHub Item format
+    local items = {}
+    for _, jf_item in ipairs(jellyfin_items or {}) do
+        table.insert(items, {
+            primary_text = jf_item.Name or 'Unknown',
+            secondary_text = jf_item.Type or '',
+        } --[[@as Item]])
+    end
+
+    events.emit('content.loaded', {
+        ctx_id = data.ctx_id,
+        nav_id = nav_id,
+        items = items,
+    } --[[@as ContentLoadedData]])
+end
+
+---Handle content navigation request from content controller
+---@param event_name EventName
+---@param data AdapterNavToData|EventData|nil
+local function handle_navigate_to(event_name, data)
+    if not data or not data.ctx_id or not data.nav_id or not data.adapter_id or not data.selection then
+        hh_utils.emit_data_error(event_name, data, 'jellyfin')
+        return
+    end
+
+    local state = get_instance(data.adapter_id)
+    local adapter_id = state.api.adapter_id
+
+    events.emit('msg.debug.' .. adapter_id, { msg = {
+        'Navigating to:', data.nav_id, 'selection:', data.selection
+    } })
+
+    -- Get the selected item from cached current_items
+    if data.selection < 1 or data.selection > #state.current_items then
+        events.emit('content.error', {
+            ctx_id = data.ctx_id,
+            nav_id = data.nav_id,
+            msg = 'Invalid selection: ' .. data.selection,
+            adapter_id = adapter_id,
+            error_type = 'invalid_selection',
+            recoverable = false,
+        } --[[@as ContentErrorData]])
+        return
+    end
+
+    local selected_item = state.current_items[data.selection]
+    local nav_id = hh_utils.encode_nav_id(adapter_id, selected_item.Id)
+
+    if selected_item.IsFolder then
+        -- Navigate into folder - fetch children
+        events.emit('content.loading', {
+            ctx_id = data.ctx_id,
+            nav_id = nav_id,
+            adapter_id = adapter_id,
+        } --[[@as ContentLoadingData]])
+
+        local children, err = state.api_client:get_items(selected_item.Id)
+
+        if err then
+            events.emit('content.error', {
+                ctx_id = data.ctx_id,
+                nav_id = nav_id,
+                msg = 'Failed to fetch folder contents: ' .. err,
+                adapter_id = adapter_id,
+                error_type = 'fetch_failed',
+                recoverable = true,
+            } --[[@as ContentErrorData]])
+            return
+        end
+
+        -- Cache new items
+        state.current_items = children or {}
+
+        -- Transform and emit
+        local items = {}
+        for _, jf_item in ipairs(state.current_items) do
+            table.insert(items, {
+                primary_text = jf_item.Name or 'Unknown',
+                secondary_text = jf_item.Type or '',
+            } --[[@as Item]])
+        end
+
+        events.emit('content.loaded', {
+            ctx_id = data.ctx_id,
+            nav_id = nav_id,
+            items = items,
+        } --[[@as ContentLoadedData]])
+    else
+        -- Play the file
+        local stream_url = state.api_client:get_stream_url(selected_item.Id)
+
+        events.emit('msg.info.' .. adapter_id, { msg = {
+            'Playing:', selected_item.Name
+        } })
+
+        -- TODO: Emit media play event or use mpv directly
+    end
+end
+
+---Initialize the adapter
+---@param config AdapterConfig
+---@return boolean success
+function adapter.init(config)
+    -- Validate configuration
+    local valid, err = validate_config(config)
+    if not valid then
+        events.emit('msg.error.jellyfin', { msg = {
+            'Jellyfin adapter validation failed:', err
+        } })
+        return false
+    end
+
+    -- Create instance state
+    local state = get_instance(config.id)
+    state.config = config
+
+    -- Initialize Jellyfin API client
+    state.api_client = JellyfinClient.new(config.url)
+
+    -- Update API with config values
+    local api = state.api
+    api.adapter_name = config.display_name or api.adapter_name
+
+    -- Register event handlers
+    events.on(api.events.request, handle_request, config.id)
+    events.on(api.events.navigate_to, handle_navigate_to, config.id)
+
+    -- Register with content controller
+    events.emit('content.register_adapter', api)
+
+    events.emit('msg.info.' .. config.id, { msg = {
+        'Jellyfin adapter initialized (authentication deferred)'
+    } })
+
+    return true
+end
+
+---Cleanup all adapter instances
+function adapter.cleanup()
+    for adapter_id, state in pairs(instances) do
+        events.cleanup_component(adapter_id)
+
+        if state.authenticated then
+            events.emit('msg.info.' .. adapter_id, { msg = {
+                'Disconnecting from Jellyfin server'
+            } })
+            -- TODO: Cleanup Jellyfin client, close connections
+        end
+
+        events.emit('msg.debug.' .. adapter_id, { msg = {
+            'Jellyfin instance cleaned up'
+        } })
+    end
+
+    -- Clear instance registry
+    instances = {}
+end
+
+return adapter

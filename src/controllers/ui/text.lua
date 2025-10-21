@@ -10,39 +10,95 @@ local options = require 'src.core.options'
 local ui_text = {}
 
 local text_state = {
+    ---@type NavCtxID
+    id = 'text',
     ---@type boolean
     active = false,
     ---@type boolean
     visible = false,
     ---@type boolean
     needs_render = true,
+    ---@type TextKeyTable
+    keybinds = {},
     ---@type boolean
     keybinds_active = false,
+    ---@type boolean
+    keybinds_set = false,
+    ---@type number
+    cursor_pos = 1,
 }
 
----Bind the default navigation keys.
-local function bind_keys()
-    if text_state.keybinds_active then return end
+---Set the keybind table to user defined keys or defaults
+local function set_keybind_table()
+    if text_state.keybinds_set then return end
 
-    local keys = options.ui_text_keys
-    hh_utils.bind_keys(keys.up, 'nav.up')
-    hh_utils.bind_keys(keys.down, 'nav.down')
-    hh_utils.bind_keys(keys.back, 'nav.back')
-    hh_utils.bind_keys(keys.select, 'nav.select')
-    hh_utils.bind_keys(keys.multiselect, 'nav.multiselect')
+    ---@type KeybindConfig?, string?
+    local keybind_table, err = hh_utils.read_json_file(options.ui_keybinds_file)
+    if not keybind_table then
+        events.emit('msg.warn.ui_text', { msg = {
+            'Unable load keybind configuration, using defaults:', err
+        } })
+    end
+
+    ---@type TextKeyTable
+    local text_keybind_table = keybind_table and keybind_table.text or {}
+
+    text_state.keybinds = {
+        up = text_keybind_table.up or {'UP'},
+        down = text_keybind_table.down or {'DOWN'},
+        back = text_keybind_table.back or {'LEFT'},
+        select = text_keybind_table.select or {'RIGHT', 'ENTER'},
+        multiselect = text_keybind_table.multiselect or {'CTRL+ENTER', 'SPACE'},
+        page_up = text_keybind_table.page_up or {'PGUP', 'CTRL+UP'},
+        page_down = text_keybind_table.page_down or {'PGDWN', 'CTRL+DOWN'},
+        search = text_keybind_table.search or {'/'},
+        help = text_keybind_table.help or {'?'},
+        toggle = text_keybind_table.toggle or {'CTRL+j', 'MENU'},
+    }
+
+    text_state.keybinds_set = true
+end
+
+---Bind the default navigation keys.
+---@return boolean False if unable to bind keys.
+local function bind_keys()
+    if text_state.keybinds_active then return true end
+
+    hh_utils.bind_keys(text_state.keybinds.up,
+                       'nav.up',
+                       'ui_text.active',
+                       nil,
+                       { repeatable = true })
+    hh_utils.bind_keys(text_state.keybinds.down,
+                       'nav.down',
+                       'ui_text.active',
+                       nil,
+                       { repeatable = true})
+    hh_utils.bind_keys(text_state.keybinds.back,
+                       'nav.back',
+                       'ui_text.active',
+                       nil,
+                       { repeatable = true})
+    hh_utils.bind_keys(text_state.keybinds.select,
+                       'nav.select',
+                       'ui_text.active')
+    hh_utils.bind_keys(text_state.keybinds.multiselect,
+                       'nav.multiselect',
+                       'ui_text.active')
+    -- TODO: implement actual events for these keys
+    -- hh_utils.bind_keys(text_state.keys.page_up, '', 'ui_text')
+    -- hh_utils.bind_keys(text_state.keys.page_down, '', 'ui_text')
+    -- hh_utils.bind_keys(text_state.keys.search, '', 'ui_text')
+    -- hh_utils.bind_keys(text_state.keys.help, '', 'ui_text')
 
     text_state.keybinds_active = true
+    return true
 end
 
 local function unbind_keys()
     if not text_state.keybinds_active then return end
 
-    local keys = options.ui_text_keys
-    hh_utils.unbind_keys(keys.up)
-    hh_utils.unbind_keys(keys.down)
-    hh_utils.unbind_keys(keys.back)
-    hh_utils.unbind_keys(keys.select)
-    hh_utils.unbind_keys(keys.multiselect)
+    events.emit('input.unbind_group', { group = 'ui_text.active' })
 
     text_state.keybinds_active = false
 end
@@ -57,13 +113,12 @@ local handlers = {
         text_state.visible = true
         bind_keys()
         events.emit('text_renderer.show')
-        events.emit('nav.context_push', { ctx_id = 'text' } --[[@as NavCtxPushData]])
+        events.emit('nav.context_push', { ctx_id = text_state.id } --[[@as NavContextPushData]])
         events.emit('content.request', {
-            ctx_id = 'text',
-            nav_id = '',
-            selection = 0,
+            ctx_id = text_state.id,
+            nav_id = ''
         } --[[@as ContentRequestData]])
-        events.emit('ui.activated_mode', { mode = 'text' } --[[@as UiModeData]])
+        events.emit('ui.activated_mode', { mode = text_state.id } --[[@as UiModeData]])
     end,
 
     ['ui.text.deactivate'] = function(_, _)
@@ -71,8 +126,8 @@ local handlers = {
         text_state.visible = false
         events.emit('text_renderer.hide')
         unbind_keys()
-        events.emit('nav.context_pop', { ctx_id = 'text' } --[[@as NavCtxPopData]])
-        events.emit('ui.deactivated_mode', { mode = 'text' } --[[@as UiModeData]])
+        events.emit('nav.context_pop', { ctx_id = text_state.id } --[[@as NavContextPopData]])
+        events.emit('ui.deactivated_mode', { mode = text_state.id } --[[@as UiModeData]])
     end,
 
     ['ui.text.show'] = function(_, _)
@@ -86,23 +141,23 @@ local handlers = {
     -- Navigation events
 
     ---@param event_name EventName
-    ---@param data NavCtxPushedData|EventData|nil
+    ---@param data NavContextChangedData|EventData
     ['nav.context_pushed'] = function(event_name, data)
         if not data or not data.old_ctx or not data.new_ctx then
             hh_utils.emit_data_error(event_name, data, 'ui_text')
             return
         end
 
-        if data.new_ctx == 'text' then
+        if data.new_ctx == text_state.id then
             if text_state.active and text_state.visible then
                 -- Got our own context push event. Nothing to do.
             else
-                -- Someone is using the 'text' context besides us...
+                -- Someone is using the text_state.id context besides us...
                 events.emit('msg.warn.ui_text', { msg = {
-                    "Navigation context id 'text' pushed by another actor..."
+                    ("Navigation context id '%s' pushed by another actor..."):format(text_state.id)
                 } })
             end
-        elseif data.old_ctx == 'text' then
+        elseif data.old_ctx == text_state.id then
             -- New context pushed
             if text_state.visible then
                 -- New context but we are still visible for some reason...
@@ -114,51 +169,95 @@ local handlers = {
     end,
 
     ---@param event_name EventName
-    ---@param data NavToData|EventData|nil
+    ---@param data NavNavigatedToData|EventData
     ['nav.navigated_to'] = function(event_name, data)
-        if not data or not hh_utils.is_valid_nav_to_data(data) then
-            hh_utils.emit_data_error(event_name, data, 'ui_text')
+        if not hh_utils.validate_data(event_name, data, hh_utils.is_nav_navigated_to, 'ui_text') then
             return
         end
 
         -- Not our navigation request
-        if data.ctx_id ~= 'text' then return end
+        if data.ctx_id ~= text_state.id then return end
 
-        events.emit('content.request', {
-            ctx_id = 'text',
-            nav_id = data.nav_id,
-            selection = data.position,
-        } --[[@as ContentRequestData]])
+        if data.trigger == 'back' then
+            -- Load previous data
+            events.emit('content.request', {
+                ctx_id = text_state.id,
+                nav_id = data.nav_id,
+            } --[[@as ContentRequestData]])
+
+            -- Update cursor if needed
+            if text_state.cursor_pos ~= data.position then
+                events.emit('nav.pos_changed', {
+                    ctx_id = data.ctx_id,
+                    position = data.position,
+                    old_position = text_state.cursor_pos,
+                } --[[@as NavPositionChangedData]])
+            end
+        end
+
+        if text_state.cursor_pos ~= data.position then
+            events.emit('nav.pos_changed', {
+                ctx_id = data.ctx_id,
+                position = data.position,
+                old_position = text_state.cursor_pos,
+            } --[[@as NavPositionChangedData]])
+        end
     end,
 
     ---@param event_name EventName
-    ---@param data NavPosChangedData|EventData|nil
+    ---@param data NavPositionChangedData|EventData
     ['nav.pos_changed'] = function(event_name, data)
-        if not data or not data.pos or not data.old_pos or not data.ctx_id then
+        if not data or not data.position or not data.old_position or not data.ctx_id then
             hh_utils.emit_data_error(event_name, data, 'ui_text')
             return
         end
 
-        if data.ctx_id ~= 'text' then return end
+        if data.ctx_id ~= text_state.id then return end
+
+        text_state.cursor_pos = data.position
 
         events.emit('text_renderer.render', {
-            cursor_pos = data.pos,
+            cursor_pos = text_state.cursor_pos,
         } --[[@as TextRendererRenderData]])
+    end,
+
+    ---@param event_name EventName
+    ---@param data NavSelectedData|EventData
+    ['nav.selected'] = function (event_name, data)
+        if not hh_utils.validate_data(event_name, data, hh_utils.is_nav_selected, 'ui_text') then
+            return
+        end
+
+        events.emit('content.navigate_to', {
+            ctx_id = data.ctx_id,
+            nav_id = data.nav_id,
+            selection = data.position,
+        } --[[@as ContentNavToData]])
     end,
 
     -- Content events
 
     ---@param event_name EventName
-    ---@param data ContentLoadedData|EventData|nil
+    ---@param data ContentLoadedData|EventData
     ['content.loaded'] = function(event_name, data)
-        if not data then
-            hh_utils.emit_data_error(event_name, data, 'ui_text')
+        if not hh_utils.validate_data(event_name, data, hh_utils.is_content_loaded, 'ui_text') then
             return
         end
 
-        if data.ctx_id ~= 'text' then return end
+        if data.ctx_id ~= text_state.id then return end
 
-        events.emit('text_renderer.render', data --[[@as TextRendererRenderData]])
+        events.emit('nav.navigate_to', {
+            ctx_id = text_state.id,
+            nav_id = data.nav_id,
+            columns = 1,
+            position = 0,
+            total_items = #data.items,
+        } --[[@as NavNavigateToData]])
+
+        events.emit('text_renderer.render', {
+            items = data.items,
+            cursor_pos = text_state.cursor_pos,
+        } --[[@as TextRendererRenderData]])
     end,
 
     ---@param event_name EventName
@@ -169,10 +268,14 @@ local handlers = {
             return
         end
 
-        if data.ctx_id ~= 'text' then return end
+        if data.ctx_id ~= text_state.id then return end
 
         events.emit('text_renderer.render', {
-            items = {}
+            items = {
+                {
+                    primary_text = 'Loading...',
+                }
+            }
         } --[[@as TextRendererRenderData]])
     end,
 
@@ -184,7 +287,7 @@ local handlers = {
             return
         end
 
-        if data.ctx_id ~= 'text' then return end
+        if data.ctx_id ~= text_state.id then return end
 
         events.emit('text_renderer.render', {
             items = {
@@ -204,22 +307,32 @@ local function handler(event_name, data)
     hh_utils.handler_template(event_name, data, handlers, 'ui_text')
 end
 
+---Setup once System is prepped
+local function on_prep()
+    -- Define keytable and bind toggle key
+    set_keybind_table()
+    hh_utils.bind_keys(text_state.keybinds.toggle, 'ui.toggle_mode', 'ui_text.global', {
+        mode = text_state.id
+    })
+
+    events.emit('ui.register_mode', { mode = text_state.id } --[[@as UiModeData]])
+end
+
 function ui_text.init()
     for event in pairs(handlers) do
         events.on(event, handler, 'ui_text')
     end
 
-    events.on('sys.prep', function()
-        events.emit('ui.register_mode', { mode = 'text' } --[[@as UiModeData]])
-    end, 'ui_text')
+    events.on('sys.prep', on_prep, 'ui_text')
 end
 
 function ui_text.cleanup()
     if text_state.active then
         events.emit('ui.deactivate_mode', {
-            mode = 'text'
+            mode = text_state.id
         } --[[@as UiModeData]])
     end
+    events.emit('input.unbind_group', { group = 'ui_text.global' })
 end
 
 return ui_text

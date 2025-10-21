@@ -2,6 +2,7 @@
 --  Utility functions
 --]]
 
+local mp = require 'mp'
 local utils = require 'mp.utils'
 
 local events = require 'src.core.events'
@@ -11,32 +12,101 @@ local events = require 'src.core.events'
 ---@class hh_utils
 local hh_utils = {}
 
----Encode adapter_id and adapter_nav_id into a content controller nav_id.
----Format: "adapter_id://adapter_nav_id"
----@param adapter_id AdapterID
----@param adapter_nav_id NavID The nav_id in the adapter's context
----@return NavID content_nav_id The nav_id in the content controller's context
-function hh_utils.encode_content_nav_id(adapter_id, adapter_nav_id)
-    return adapter_id .. '://' .. (adapter_nav_id or '')
-end
+---Read and parse JSON file at the given path.
+---@param file_path string Path to JSON file (supports mpv path expansion like ~~/)
+---@return table? data Parsed JSON data (nil on failure)
+---@return string? error Error message if read/parse failed
+function hh_utils.read_json_file(file_path)
+    local expanded_path = mp.command_native({'expand-path', file_path}) --[[@as string]]
 
----Decode content controller nav_id into adapter_id and adapter_nav_id.
----Format: "adapter_id://adapter_nav_id"
----@param content_nav_id NavID The nav_id in the content controller's context
----@return AdapterID adapter_id
----@return NavID adapter_nav_id The nav_id in the adapter's context
-function hh_utils.decode_content_nav_id(content_nav_id)
-    if not content_nav_id or content_nav_id == '' then
-        return '', ''
+    local file, io_err = io.open(expanded_path, 'r')
+    if not file then
+        return nil, ("Could not open file '%s': %s"):format(file_path, io_err)
     end
-    local adapter_id, adapter_nav_id = content_nav_id:match('^(.-)://(.*)$')
-    return adapter_id or '', adapter_nav_id or ''
+
+    local content = file:read('*a')
+    file:close()
+
+    local data = utils.parse_json(content)
+    if not data then
+        return nil, ("Invalid JSON syntax in '%s'"):format(file_path)
+    end
+
+    if type(data) ~= 'table' then
+        return nil, ("Expected JSON object or array in '%s', got %s"):format(
+            file_path,
+            type(data)
+        )
+    end
+
+    return data, nil
 end
 
----Get valid NavToData for `nav.navigate_to` request.
+---Validate data and emit error if invalid
+---@param event_name EventName
+---@param data EventData|nil
+---@param validator fun(data: any): boolean
+---@param controller string
+---@return boolean valid
+function hh_utils.validate_data(event_name, data, validator, controller)
+    if not validator(data) then
+        hh_utils.emit_data_error(event_name, data, controller)
+        return false
+    end
+    return true
+end
+
+---Is `data` received during `content.loaded` event.
+---@param data ContentLoadedData|EventData
+---@return boolean
+function hh_utils.is_content_loaded(data)
+    return  type(data) == 'table'
+        and type(data.ctx_id) == 'string'
+        and type(data.nav_id) == 'string'
+        and type(data.items) == 'table'
+end
+
+---Encode `prefix` and `rest` into a valid nav_id.
+---Format: "prefix://rest"
+---@param prefix string
+---@param rest string
+---@return NavID
+function hh_utils.encode_nav_id(prefix, rest)
+    return prefix .. '://' .. (rest or '')
+end
+
+---Decode nav_id into `prefix` and `rest`.
+---Format: "prefix://rest"
+---@param nav_id NavID
+---@return NavIDParts
+function hh_utils.decode_nav_id(nav_id)
+    if not nav_id or nav_id == '' then
+        return {
+            prefix = '',
+            rest = '',
+        } --[[@as NavIDParts]]
+    end
+    local prefix, rest = nav_id:match('^(.-)://(.*)$')
+    return {
+        prefix = prefix or '',
+        rest = rest or '',
+    } --[[@as NavIDParts]]
+end
+
+---Is `data` valid NavSelectedData type.
 ---@param data any
 ---@return boolean
-function hh_utils.is_valid_nav_to_data(data)
+function hh_utils.is_nav_selected(data)
+    return type(data) == 'table'
+        and type(data.ctx_id) == 'string'
+        and type(data.nav_id) == 'string'
+        and type(data.position) == 'number'
+end
+
+---Is `data` valid NavNavigateToData type.
+---@param data any
+---@return boolean
+function hh_utils.is_nav_navigate_to(data)
     return type(data) == 'table'
         and type(data.ctx_id) == 'string'
         and type(data.nav_id) == 'string'
@@ -49,7 +119,24 @@ function hh_utils.is_valid_nav_to_data(data)
         and (data.total_items == 0 or data.position <= data.total_items)
 end
 
----Wrapper for `events.emit('msg.error.navigation')` when data is invalid.
+---Is `data` valid NavNavigateToData type.
+---@param data any
+---@return boolean
+function hh_utils.is_nav_navigated_to(data)
+    return type(data) == 'table'
+        and type(data.ctx_id) == 'string'
+        and type(data.nav_id) == 'string'
+        and type(data.columns) == 'number'
+        and type(data.position) == 'number'
+        and type(data.total_items) == 'number'
+        and type(data.trigger) == 'string'
+        and data.columns >= 1
+        and data.position >= 1
+        and data.total_items >= 0
+        and (data.total_items == 0 or data.position <= data.total_items)
+end
+
+---Wrapper for `events.emit('msg.error.controller')` when data is invalid.
 ---@param event_name EventName
 ---@param data EventData|nil
 ---@param controller string
@@ -100,10 +187,11 @@ end
 ---Key bind helper.
 ---@param keys string[]
 ---@param event_name EventName
+---@param group_name InputGroup 
 ---@param ctx? InputCtx
 ---@param flags? InputFlags
 ---@return boolean
-function hh_utils.bind_keys(keys, event_name, ctx, flags)
+function hh_utils.bind_keys(keys, event_name, group_name, ctx, flags)
     if type(keys) ~= 'table' then
         events.emit('msg.error.hh_utils', { msg = {
             'Expected a list of key strings, got:', utils.to_string(keys)
@@ -115,31 +203,9 @@ function hh_utils.bind_keys(keys, event_name, ctx, flags)
         events.emit('input.bind', {
             key = key,
             event = event_name,
+            group = group_name,
             ctx = ctx or {},
             flags = flags or {},
-        } --[[@as InputData]])
-    end
-
-    return true
-end
-
----Key unbind helper.
----@param keys string[]
----@return boolean
-function hh_utils.unbind_keys(keys)
-    if type(keys) ~= 'table' then
-        events.emit('msg.error.hh_utils', { msg = {
-            'Expected a list of key strings, got:', utils.to_string(keys)
-        } })
-        return false
-    end
-
-    for _, key in ipairs(keys) do
-        events.emit('input.unbind', {
-            key = key,
-            event = '',
-            ctx = {},
-            flags = {},
         } --[[@as InputData]])
     end
 
@@ -158,12 +224,15 @@ function hh_utils.handler_template(event_name, data, handlers, component)
             'Got unhandled event:', event_name
         } })
     else
+        events.emit('msg.debug.' .. component, { msg = {
+            ("Got event '%s' with data '%s'."):format(event_name, utils.to_string(data))
+        } })
         local success, err = pcall(fn, event_name, data)
         if not success then
-            events.emit('msg.error.' .. component, {msg = err})
+            events.emit('msg.error.' .. component, { msg = err })
         else
-            events.emit('msg.debug.' .. component, { msg = {
-                ("Handled event '%s' with data '%s'."):format(event_name, utils.to_string(data))
+            events.emit('msg.trace.' .. component, { msg = {
+                ("Successfully handled event '%s'."):format(event_name)
             } })
         end
     end

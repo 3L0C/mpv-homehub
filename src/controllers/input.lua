@@ -8,45 +8,29 @@ local utils = require 'mp.utils'
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
 
----@alias InputKey string
----@alias InputCtx EventData
-
----@class InputFlags
----@field repeatable boolean?
----@field scalable boolean?
----@field complex boolean?
-
----@class InputBind
----@field key InputKey
----@field event EventName
----@field name string
----@field ctx InputCtx
----@field flags? InputFlags
-
----@class InputData
----@field key InputKey
----@field event EventName
----@field ctx InputCtx
----@field flags InputFlags
-
 --@class input: Controller
 local input = {}
 
 ---@type table<InputKey,InputBind[]>
 local binding_stack = {}
 
+---@type table<InputGroup, table<InputKey, boolean>>
+local group_registry = {}
+
 ---Test if `key` and `event` are valid bind requests.
 ---@param key string
 ---@param event string
+---@param group string 
 ---@return boolean
-local function is_valid_bind(key, event)
-    return key ~= '' and event ~= ''
+local function is_valid_bind(key, event, group)
+    return key ~= '' and event ~= '' and group ~= ''
 end
 
 ---Extract the fields from InputData
 ---@param data InputData
 ---@return InputKey key string
 ---@return EventName event string
+---@return InputGroup group string
 ---@return InputCtx Event context
 ---@return InputFlags flags table
 local function get_input_data(data)
@@ -54,6 +38,8 @@ local function get_input_data(data)
     local key = ''
     ---@type EventName
     local event = ''
+    ---@type InputGroup
+    local group = ''
     ---@type InputCtx
     local ctx = {}
     ---@type InputFlags
@@ -65,6 +51,9 @@ local function get_input_data(data)
     if data.event and type(data.event) == 'string' then
         event = data.event
     end
+    if data.group and type(data.group) == 'string' then
+        group = data.group
+    end
     if data.ctx and type(data.ctx) == 'table' then
         ctx = data.ctx
     end
@@ -72,7 +61,7 @@ local function get_input_data(data)
         flags = data.flags
     end
 
-    return key, event, ctx, flags
+    return key, event, group, ctx, flags
 end
 
 ---Removes binds from `#stack` to `to`.
@@ -95,10 +84,41 @@ local function unbind_to(stack, to)
 
     -- Remove bindings
     repeat
-        ---@type InputBind|nil
+        ---@type InputBind?
         local top_bind = table.remove(stack)
         if top_bind then mp.remove_key_binding(top_bind.name) end
     until #stack < to
+end
+
+---Remove all bindings for a specific group from a key's stack.
+---@param key InputKey
+---@param group InputGroup
+local function unbind_group_from_key(key, group)
+    local stack = binding_stack[key]
+    if not stack then return end
+    if #stack == 0 then return end
+
+    -- Find and remove all bindings from this group
+    local i = 1
+    while i <= #stack do
+        if stack[i].group == group then
+            mp.remove_key_binding(stack[i].name)
+            table.remove(stack, i)
+            -- Don't increment i, as we just shifted the array
+        else
+            i = i + 1
+        end
+    end
+
+    -- Restore the top binding if one exists
+    local top_bind = stack[#stack]
+    if top_bind then
+        mp.add_forced_key_binding(
+            key, top_bind.name,
+            function() events.emit(top_bind.event, top_bind.ctx) end,
+            top_bind.flags
+        )
+    end
 end
 
 ---@type HandlerTable
@@ -108,8 +128,8 @@ local handlers = {
     ---@param _ EventName
     ---@param data InputData
     ['input.bind'] = function(_, data)
-        local key, event, ctx, flags = get_input_data(data)
-        if not is_valid_bind(key, event) then
+        local key, event, group, ctx, flags = get_input_data(data)
+        if not is_valid_bind(key, event, group) then
             events.emit('msg.error.input', { msg = {
                 "Got invalid data in 'input.bind' request:", utils.to_string(data)
             } })
@@ -128,20 +148,58 @@ local handlers = {
             mp.remove_key_binding(previous_bind.name)
         end
 
-        -- Push new event ont stack
+        -- Push new event onto stack
         ---@type InputBind
-
         local new_bind = {
             key = key,
             event = event,
+            group = group,
             name = 'homehub/' .. event:gsub('%.', '_') .. '_' .. key,
             ctx = ctx,
             flags = flags,
         }
+
         table.insert(binding_stack[key], new_bind)
+
+        -- Track in group registry
+        if not group_registry[group] then
+            group_registry[group] = {}
+        end
+        group_registry[group][key] = true
+
         mp.add_forced_key_binding(
-            key, new_bind.name, function() events.emit(new_bind.event, ctx) end, new_bind.flags
+            key, new_bind.name,
+            function() events.emit(new_bind.event, ctx) end,
+            new_bind.flags
         )
+    end,
+
+    ---Unbind all keys belonging to a group.
+    ---@param event_name EventName
+    ---@param data InputUnbindData
+    ['input.unbind_group'] = function (event_name, data)
+        if not data or not data.group or type(data.group) ~= 'string' then
+            hh_utils.emit_data_error(event_name, data, 'input')
+            return
+        end
+
+        local group = data.group
+        local keys_in_group = group_registry[group]
+
+        if not keys_in_group then
+            events.emit('msg.debug.input', { msg = {
+                'No bindings found for group:', group
+            } })
+            return
+        end
+
+        -- Unbind all keys in this group
+        for key, _ in pairs(keys_in_group) do
+            unbind_group_from_key(key, group)
+        end
+
+        -- Clear group registry
+        group_registry[group] = nil
     end,
 
     ---Removes top level bind, and restores next bind in the the stack if present.

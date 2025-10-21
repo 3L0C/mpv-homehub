@@ -1,8 +1,14 @@
 ---@meta _
 
+---Represents a browse or refresh request
 ---@class ContentRequestData
 ---@field ctx_id NavCtxID
 ---@field nav_id NavID
+---
+---Represents a selection request
+---@class ContentNavToData
+---@field ctx_id NavCtxID
+---@field nav_id NavID 
 ---@field selection number
 ---
 ---@class ContentLoadingData

@@ -1,17 +1,26 @@
 ---@meta _
 
----Represents the items passed to the text view.
----@class TextItem
----@field primary_text string Main display text.
----@field secondary_text? string Optional secondary line.
----@field prefix_icon? string Optional leading icon/symbol.
----@field suffix_text? string Optional trailing text/info.
----@field style_variant? 'default'|'accent'|'secondary'|'muted'
----@field highlight? boolean
+---Item returned by adapters with all available metadata.
+---Adapters populate what they have, views use what they need.
+---@class Item
+---
+--- Core display fields (always present)
+---@field primary_text string Main display text
+---@field secondary_text? string Optional secondary display text
+---
+--- Visual styling hints (optional, for text/list views)
+---@field prefix_icon? string Optional leading icon/symbol
+---@field suffix_text? string Optional trailing text/info
+---@field style_variant? 'default'|'accent'|'secondary'|'muted' Visual style hint
+---@field highlight? boolean Whether to highlight this item
 ---@field indent_level? number Visual indentation level (0-based)
 ---
----Represents the items passed to the gallery view.
----@class GalleryItem: TextItem
+--- Rich metadata (optional, for gallery/grid views)
+---@field thumbnail_url? string URL/path to thumbnail image
+---@field image_aspect_ratio? number Aspect ratio for image display (e.g., 16/9)
+---@field duration_seconds? number Media duration in seconds
+---@field media_type? 'video'|'audio'|'image'|'folder'|'other' Content type
+---@field file_size? number File size in bytes
 ---
----Represents an item returned by a provider.
----@class Item: GalleryItem
+--- Extended metadata (optional, adapter-specific)
+---@field metadata? table Any additional adapter-specific data
