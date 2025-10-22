@@ -25,7 +25,7 @@
 ---@field page_down string[] ?
 ---@field search string[]?
 ---@field help string[]?
----@field toggle string[]? 
+---@field toggle string[]?
 ---
 ---Gallery keybind table
 ---@class GalleryKeyTable
@@ -33,8 +33,14 @@
 ---Search keybind table
 ---@class SearchKeyTable
 ---
+---Global keybind table
+---@class GlobalKeyTable
+---@field next string[]?
+---@field prev string[]?
+---
 ---Main keybind configuration class
 ---@class KeybindConfig
+---@field global GlobalKeyTable
 ---@field text TextKeyTable
 ---@field gallery GalleryKeyTable
----@field search SearchKeyTable 
+---@field search SearchKeyTable

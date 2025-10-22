@@ -4,6 +4,9 @@
 
 local opt = require 'mp.options'
 
+local events = require 'src.core.events'
+local hh_utils = require 'src.core.utils'
+
 ---@class options
 local options = {
     -- directory to load external modules - currently only user-input-module
@@ -15,8 +18,10 @@ local options = {
     ---@type boolean
     ui_autostart = false,
 
-    -- UI keybinds
-    ui_keybinds_file = '~~/script-opts/homehub-keybinds.json',
+    -- Keybinds file path
+    keybinds_file = '~~/script-opts/homehub-keybinds.json',
+    ---@type KeybindConfig
+    keybinds = nil,
 
     -- ASS configuration
 
@@ -31,8 +36,10 @@ local options = {
     font_color_warning = '413eff',
 
     -- Cursor and selection markers
+    normal_icon = '○',
+    selected_icon = '◉',
     cursor_icon = '▶',
-    selection_icon = '◉',
+    cursor_selected_icon = '➤',
 
     -- Alignment
     align_x = 'left',
@@ -49,6 +56,15 @@ local options = {
 function options.init()
     -- read user configuration
     opt.read_options(options, 'homehub')
+
+    local keybind_table, err = hh_utils.read_json_file(options.keybinds_file)
+    if not keybind_table then
+        events.emit('msg.warn.options', { msg = {
+            'Unable to load keybind configuration, using defaults:', err
+        } })
+    end
+
+    options.keybinds = keybind_table or {}
 end
 
 return options

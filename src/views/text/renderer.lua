@@ -261,10 +261,17 @@ end
 ---@param position number
 local function render_cursor(position)
     if position == renderer_state.cursor_position then
-        append_to_buffer(renderer_state.style.cursor, options.cursor_icon, '\\h')
+        if renderer_state.selection_state[position] then
+            append_to_buffer(renderer_state.style.cursor, options.cursor_selected_icon, '\\h')
+        else
+            append_to_buffer(renderer_state.style.cursor, options.cursor_icon, '\\h')
+        end
     else
-        -- Render empty space equivalent to cursor width
-        append_to_buffer('\\h\\h\\h')  -- Account for icon width
+        if renderer_state.selection_state[position] then
+            append_to_buffer(options.selected_icon, '\\h')
+        else
+            append_to_buffer(options.normal_icon, '\\h')
+        end
     end
 end
 

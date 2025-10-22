@@ -2,6 +2,8 @@
 --  Text UI controller.
 --]]
 
+local mp = require 'mp'
+
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
 local options = require 'src.core.options'
@@ -32,16 +34,8 @@ local text_state = {
 local function set_keybind_table()
     if text_state.keybinds_set then return end
 
-    ---@type KeybindConfig?, string?
-    local keybind_table, err = hh_utils.read_json_file(options.ui_keybinds_file)
-    if not keybind_table then
-        events.emit('msg.warn.ui_text', { msg = {
-            'Unable load keybind configuration, using defaults:', err
-        } })
-    end
-
     ---@type TextKeyTable
-    local text_keybind_table = keybind_table and keybind_table.text or {}
+    local text_keybind_table = options.keybinds and options.keybinds.text or {}
 
     text_state.keybinds = {
         up = text_keybind_table.up or {'UP'},
@@ -131,10 +125,12 @@ local handlers = {
     end,
 
     ['ui.text.show'] = function(_, _)
+        bind_keys()
         events.emit('text_renderer.show')
     end,
 
     ['ui.text.hide'] = function(_, _)
+        unbind_keys()
         events.emit('text_renderer.hide')
     end,
 
@@ -311,7 +307,7 @@ end
 local function on_prep()
     -- Define keytable and bind toggle key
     set_keybind_table()
-    hh_utils.bind_keys(text_state.keybinds.toggle, 'ui.toggle_mode', 'ui_text.global', {
+    hh_utils.bind_keys(text_state.keybinds.toggle, 'ui.toggle', 'ui_text.global', {
         mode = text_state.id
     })
 

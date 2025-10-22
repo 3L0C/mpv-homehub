@@ -46,9 +46,18 @@ function mp.add_forced_key_binding(key, name_or_fn, fn, flags) end
 ---@return MPTimer
 function mp.add_timeout(seconds, fn, disabled) end
 
+---@param seconds number
+---@param fn function
+---@param disabled? boolean
+---@return MPTimer
+function mp.add_periodic_timer(seconds, fn, disabled) end
+
 ---@param format 'ass-events'
 ---@return OSDOverlay
 function mp.create_osd_overlay(format) end
+
+---@param command string
+function mp.command(command) end
 
 ---@param ... string
 function mp.commandv(...) end
@@ -103,6 +112,10 @@ function mp.get_script_directory() end
 
 ---@return string
 function mp.get_script_name() end
+
+---@param text string Text to display
+---@param duration? number Seconds to display text
+function mp.osd_message(text, duration) end
 
 ---@param name string
 ---@param type 'native'|'bool'|'string'|'number'

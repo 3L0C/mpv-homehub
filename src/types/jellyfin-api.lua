@@ -1,5 +1,14 @@
 ---@meta _
 ---
+---@class JellyfinUserData
+---@field IsFavorite? boolean
+---@field ItemId? string
+---@field Played? boolean
+---@field Key? string
+---@field LastPlayedDate? string
+---@field PlayCount? number
+---@field PlaybackPositionTicks? number
+---
 ---@class JellyfinItem
 ---@field Id string UUID of the item
 ---@field Name? string Display name
@@ -16,3 +25,12 @@
 ---@field Path? string File path
 ---@field MediaSources? table[] Available media sources
 ---@field PrimaryImageAspectRatio? number Aspect ratio of primary image
+---@field SeriesId? string UUID of parent series (for episodes)
+---@field SeasonId? string UUID of parent season (for episodes)
+---@field IndexNumber? integer Episode number
+---@field ParentIndexNumber? integer Season number
+---@field UserData? JellyfinUserData User data object
+---
+---@class JellyfinSyncData
+---@field item_id string
+---@field state 'playing'

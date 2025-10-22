@@ -59,12 +59,6 @@ local function handle_adapter_root_request(ctx_id, adapter_id)
         'Single adapter - requesting root content from:', adapter_id
     } })
 
-    events.emit('content.loading', {
-        ctx_id = ctx_id,
-        nav_id = '',
-        adapter_id = adapter_id,
-    } --[[@as ContentLoadingData]])
-
     events.emit(api.events.request, {
         ctx_id = ctx_id,
         nav_id = '',
@@ -158,12 +152,6 @@ local function handle_adapter_selection(ctx_id, selection)
         'User selected adapter:', adapter_id,
     } })
 
-    events.emit('content.loading', {
-        ctx_id = ctx_id,
-        nav_id = hh_utils.encode_nav_id(adapter_id, ''),
-        adapter_id = adapter_id,
-    } --[[@as ContentLoadingData]])
-
     events.emit(api.events.request, {
         ctx_id = ctx_id,
         nav_id = '',
@@ -207,12 +195,6 @@ local function handle_navigation_request(ctx_id, nav_id, selection)
     events.emit('msg.debug.content', { msg = {
         'Routing request to:', adapter_id, 'location:', adapter_nav_id
     } })
-
-    events.emit('content.loading', {
-        ctx_id = ctx_id,
-        nav_id = nav_id,
-        adapter_id = adapter_id,
-    } --[[@as ContentLoadingData]])
 
     events.emit(api.events.navigate_to, {
         ctx_id = ctx_id,
@@ -264,7 +246,7 @@ local handlers = {
 
     ---@param event_name EventName
     ---@param data ContentNavToData|EventData|nil
-    ['content.navigate_to'] = function (event_name, data)
+    ['content.navigate_to'] = function(event_name, data)
         if not data or not data.ctx_id or not data.nav_id or not data.selection then
             hh_utils.emit_data_error(event_name, data, 'content')
             return

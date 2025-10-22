@@ -1,0 +1,6 @@
+---@meta _
+---
+---Message data.
+---@class MessengerData
+---@field msg string|string[]
+---@field separator? string 

@@ -30,6 +30,13 @@
 ---@field position number 0 = auto/default, >0 = specific position
 ---@field total_items number
 ---
+---Request to update the navigation state for the current context
+---@class NavSetStateData
+---@field ctx_id NavCtxID
+---@field columns? number
+---@field position? number
+---@field total_items? number
+---
 -- ============================================================================
 -- Navigation Events (System → Listeners)
 -- ============================================================================

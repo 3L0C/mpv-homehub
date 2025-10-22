@@ -6,6 +6,8 @@
 local mp = require 'mp'
 local utils = require 'mp.utils'
 
+local events = require 'src.core.events'
+
 ---@class http
 local http = {}
 
@@ -60,6 +62,10 @@ function http.request(method, url, options)
         playback_only = false,
         args = args,
     })
+
+    events.emit('msg.trace.http', { msg = {
+        'Result:', utils.to_string(result)
+    } })
 
     if not result then
         return nil, 'subprocess command returned nil'
@@ -183,12 +189,25 @@ function http.post_json(url, data, options)
 end
 
 ---Build query string from parameters
----@param params table<string, string|number|boolean>
+---Handles string, number, boolean, and array values
+---Arrays are joined with commas (e.g., sortBy=Name,Date)
+---@param params table<string, string|number|boolean|table>
 ---@return string query_string
 function http.build_query(params)
     local parts = {}
     for key, value in pairs(params) do
-        table.insert(parts, key .. '=' .. tostring(value))
+        local encoded_value
+        if type(value) == 'table' then
+            -- Join array values with commas
+            local string_values = {}
+            for _, v in ipairs(value) do
+                table.insert(string_values, tostring(v))
+            end
+            encoded_value = table.concat(string_values, ',')
+        else
+            encoded_value = tostring(value)
+        end
+        table.insert(parts, key .. '=' .. encoded_value)
     end
     return table.concat(parts, '&')
 end

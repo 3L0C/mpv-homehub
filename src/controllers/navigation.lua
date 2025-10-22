@@ -467,6 +467,53 @@ local handlers = {
 
     ['nav.select'] = function(_, _) emit_select_type_event('nav.selected') end,
     ['nav.multiselect'] = function(_, _) emit_select_type_event('nav.multiselected') end,
+
+    -- Direct navigation
+
+    ---Set the state for the current nav_id of data.ctx_id
+    ---@param event_name EventName
+    ---@param data NavSetStateData|EventData|nil
+    ['nav.set_state'] = function (event_name, data)
+        if not data or not data.ctx_id then
+            hh_utils.emit_data_error(event_name, data, 'navigation')
+            return
+        end
+
+        local state = get_current_state()
+        local ctx_id = get_current_ctx_id()
+
+        if data.ctx_id ~= ctx_id then
+            local nav_id_stack = nav_ctx_table[data.ctx_id]
+
+            if not nav_id_stack or #nav_id_stack == 0 then
+                events.emit('msg.error.navigation', { msg = {
+                    'Uninitialized context:', data.ctx_id
+                } })
+                return
+            end
+
+            local nav_id = nav_id_stack[#nav_id_stack]
+            ctx_id = data.ctx_id
+            state = nav_id_table[nav_id]
+        end
+
+        if not state then
+            events.emit('msg.error.navigation', { msg = {
+                'Uninitialized context:', data.ctx_id
+            } })
+            return
+        end
+
+        if type(data.position) == 'number' then
+            local old_pos = state.position
+            state.position = data.position
+            events.emit('nav.pos_changed', {
+                ctx_id = data.ctx_id,
+                old_position = old_pos,
+                position = data.position
+            } --[[@as NavPositionChangedData]])
+        end
+    end,
 }
 
 ---Main navigation event handler.

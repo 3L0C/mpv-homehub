@@ -2,6 +2,7 @@
 --  UI coordinator.
 --]]
 
+local mp = require 'mp'
 local utils = require 'mp.utils'
 
 local events = require "src.core.events"
@@ -13,7 +14,10 @@ local ui = {}
 
 local ui_state = {
     -- Main UI state
-    active = false,
+    ---@type boolean
+    is_active = false,
+    ---@type boolean
+    is_hidden = false,
     ---@type Set<UiMode>
     registered_modes = {},
     ---@type UiMode
@@ -62,7 +66,7 @@ end
 ---Deactivate `ui_state.active_mode`
 ---@return boolean
 local function deactivate_mode()
-    if not ui_state.active then return true end
+    if not ui_state.is_active then return true end
 
     if not ui_state.active_mode then
         events.emit('msg.error.ui', { msg = {
@@ -81,7 +85,7 @@ local function deactivate_mode()
         return false
     end
 
-    ui_state.active = false
+    ui_state.is_active = false
     ui_state.active_mode = nil
     return true
 end
@@ -98,13 +102,13 @@ local function activate_mode(mode)
     end
 
     -- Mode is already active. Do nothing.
-    if ui_state.active and ui_state.active_mode == mode then return end
+    if ui_state.is_active and ui_state.active_mode == mode then return end
 
     -- Exit if unable to deactivate current mode
-    if ui_state.active and not deactivate_mode() then
+    if ui_state.is_active and not deactivate_mode() then
         return
     else
-        ui_state.active = true
+        ui_state.is_active = true
     end
 
     -- Activate requested mode
@@ -243,7 +247,7 @@ local function make_overlay_stack_handler(on_success)
         local overlay = validate_overlay(event_name, data)
         if not overlay then return end
 
-        if not ui_state.active then
+        if not ui_state.is_active then
             events.emit('msg.warn.ui', { msg = {
                 ("Ignoring '%s' request - no main UI active:"):format(event_name),
                 overlay
@@ -294,6 +298,22 @@ local handlers = {
         deactivate_mode()
     end,
 
+    ---@param event_name EventName 
+    ---@param data UiModeData|EventData? 
+    ['ui.toggle'] = function(event_name, data)
+        local mode = validate_mode(event_name, data) or ui_state.default_mode
+
+        if not ui_state.is_active then
+            activate_mode(mode)
+        elseif ui_state.is_hidden then
+            mp.commandv('cycle', 'pause')
+            events.emit('ui.show')
+        else
+            mp.commandv('cycle', 'pause')
+            events.emit('ui.hide')
+        end
+    end,
+
     ---@param event_name EventName
     ---@param data UiModeData|EventData|nil
     ['ui.toggle_mode'] = function(event_name, data)
@@ -313,7 +333,7 @@ local handlers = {
     end),
 
     ['ui.deactivated_mode'] = make_mode_transition_handler(function(_)
-        ui_state.active = false
+        ui_state.is_active = false
         ui_state.active_mode = nil
     end),
 
@@ -332,6 +352,24 @@ local handlers = {
             'Unregistered overlay:', overlay
         } })
     end),
+
+    ['ui.show'] = function(_, _)
+        ui_state.is_hidden = false
+        if #ui_state.overlay_stack == 0 then
+            events.emit('ui.' .. ui_state.active_mode .. '.show')
+        else
+            events.emit('ui.' .. ui_state.overlay_stack[#ui_state.overlay_stack] .. '.show')
+        end
+    end,
+
+    ['ui.hide'] = function(_, _)
+        ui_state.is_hidden = true
+        if #ui_state.overlay_stack == 0 then
+            events.emit('ui.' .. ui_state.active_mode .. '.hide')
+        else
+            events.emit('ui.' .. ui_state.overlay_stack[#ui_state.overlay_stack] .. '.hide')
+        end
+    end,
 
     ['ui.push_overlay'] = make_overlay_stack_handler(function(overlay)
         -- Main UI still showing.
@@ -389,6 +427,19 @@ local handlers = {
             events.emit('ui.' .. ui_state.overlay_stack[#ui_state.overlay_stack] .. '.show')
         end
     end),
+
+    ---@param event_name EventName
+    ---@param data UiUpdateData|EventData|nil
+    ['ui.update'] = function (event_name, data)
+        if not data then return end
+
+        if type(data.cursor_pos) == 'number' then
+            events.emit('nav.set_state', {
+                ctx_id = ui_state.active_mode,
+                position = data.cursor_pos
+            } --[[@as NavSetStateData]])
+        end
+    end
 }
 
 ---Main ui event handler.
@@ -408,7 +459,7 @@ function ui.init()
 end
 
 function ui.cleanup()
-    if not ui_state.active then return end
+    if not ui_state.is_active then return end
 
     for _, overlay in ipairs(ui_state.overlay_stack) do
         events.emit('ui.pop_overlay', { overlay = overlay })

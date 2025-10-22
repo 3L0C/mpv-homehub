@@ -5,10 +5,6 @@
 local msg = require 'mp.msg'
 local utils = require 'mp.utils'
 
----@class LoggerData
----@field msg string[]|string
----@field separator? string
----
 ---@alias LoggerFun fun(message: string)
 ---@alias LoggerHandler table<string,LoggerFun>
 
@@ -28,12 +24,13 @@ local logger = {
 
 ---Main event handler.
 ---@param event_name string
----@param data LoggerData
+---@param data MessengerData
 function logger.log(event_name, data)
     if not event_name:match('^msg%.') then
         msg.error('[Logger] Got unrecognized event:', event_name, 'data:', utils.to_string(data))
         return
     end
+
     if not data.msg then
         msg.error('[Logger] Got invalid event data:', utils.to_string(data))
         return
@@ -44,12 +41,15 @@ function logger.log(event_name, data)
 
     ---@type string
     local message = ('[%s] '):format(component)
+
     if type(data.msg) == 'string' then
         message = message .. data.msg
     elseif type(data.msg) == 'table' then
         message =  message .. table.concat(data.msg --[=[@as string[]]=], data.separator or ' ')
     else
-        msg.error('[Logger] Invalid msg field type:', type(data.msg), 'expected string or table')
+        msg.error('[Logger] Invalid msg field type:',
+                  type(data.msg),
+                  'expected string or array of strings')
         return
     end
 

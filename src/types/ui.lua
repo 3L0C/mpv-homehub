@@ -8,3 +8,6 @@
 ---
 ---@class UiOverlayData
 ---@field overlay UiOverlay
+---
+---@class UiUpdateData
+---@field cursor_pos? number

@@ -2,6 +2,8 @@
 --  Jellyfin adapter
 --]]
 
+local utils = require 'mp.utils'
+
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
 
@@ -16,8 +18,8 @@ local adapter = {
 }
 
 ---@class JellyfinAdapterState: AdapterState
----@field api_client JellyfinClient|nil
----@field current_items JellyfinItem[] 
+---@field api_client JellyfinClient?
+---@field current_items JellyfinItem[]
 ---
 ---Registry of adapter instances
 ---@type table<AdapterID, JellyfinAdapterState>
@@ -42,10 +44,13 @@ local function get_instance(adapter_id)
                 events = {
                     request = adapter_id .. '.request',
                     navigate_to = adapter_id .. '.navigate_to',
+                    next = adapter_id .. '.next',
+                    prev = adapter_id .. '.prev',
                     search = adapter_id .. '.search',
                     action = adapter_id .. '.action',
                     status = adapter_id .. '.status',
                     error = adapter_id .. '.error',
+                    sync = adapter_id .. '.sync',
                 },
                 capabilities = {
                     supports_search = true,
@@ -131,11 +136,6 @@ local function authenticate(adapter_id)
         events.emit('msg.error.' .. adapter_id, { msg = {
             'Failed to authenticate with Jellyfin server:', err or 'unknown error'
         } })
-
-        -- Optionally unregister on permanent failure
-        -- events.emit('content.unregister_adapter', { 
-        --     adapter_id = adapter_id 
-        -- })
 
         return false
     end
@@ -293,13 +293,47 @@ local function handle_navigate_to(event_name, data)
         } --[[@as ContentLoadedData]])
     else
         -- Play the file
-        local stream_url = state.api_client:get_stream_url(selected_item.Id)
-
         events.emit('msg.info.' .. adapter_id, { msg = {
             'Playing:', selected_item.Name
         } })
 
-        -- TODO: Emit media play event or use mpv directly
+        -- Hide UI
+        events.emit('ui.hide')
+
+        -- Play via client
+        local success, err = state.api_client:play(selected_item)
+
+        if not success then
+            events.emit('msg.error.' .. adapter_id, { msg = {
+                'Playback failed:', err or 'unknown error'
+            } })
+
+            -- Restore UI on error
+            events.emit('ui.show')
+        end
+    end
+end
+
+---Handle sync request from client
+---@param event_name EventName
+---@param data AdapterSyncData|EventData|nil
+local function handle_sync(event_name, data)
+    if not data or not data.adapter_id or type(data.data) ~= 'table' then
+        hh_utils.emit_data_error(event_name, data, 'jellyfin')
+        return
+    end
+
+    local state = get_instance(data.adapter_id)
+    local sync_data = data.data --[[@as JellyfinSyncData]]
+
+    if sync_data.state == 'playing' then
+        for i, item in ipairs(state.current_items) do
+            if item.Id == sync_data.item_id then
+                events.emit('ui.update', {
+                    cursor_pos = i,
+                } --[[@as UiUpdateData]])
+            end
+        end
     end
 end
 
@@ -320,21 +354,25 @@ function adapter.init(config)
     local state = get_instance(config.id)
     state.config = config
 
-    -- Initialize Jellyfin API client
-    state.api_client = JellyfinClient.new(config.url)
+    -- Get auto_play_next setting (defaults to true if not specified)
+    local auto_play_next = config.auto_play_next ~= false
 
     -- Update API with config values
     local api = state.api
     api.adapter_name = config.display_name or api.adapter_name
 
+    -- Initialize Jellyfin API client
+    state.api_client = JellyfinClient.new(config.url, api.events, api.adapter_id, auto_play_next)
+
     -- Register event handlers
-    events.on(api.events.request, handle_request, config.id)
-    events.on(api.events.navigate_to, handle_navigate_to, config.id)
+    events.on(api.events.request, handle_request, api.adapter_id)
+    events.on(api.events.navigate_to, handle_navigate_to, api.adapter_id)
+    events.on(api.events.sync, handle_sync, api.adapter_id)
 
     -- Register with content controller
     events.emit('content.register_adapter', api)
 
-    events.emit('msg.info.' .. config.id, { msg = {
+    events.emit('msg.info.' .. api.adapter_id, { msg = {
         'Jellyfin adapter initialized (authentication deferred)'
     } })
 
@@ -350,7 +388,11 @@ function adapter.cleanup()
             events.emit('msg.info.' .. adapter_id, { msg = {
                 'Disconnecting from Jellyfin server'
             } })
-            -- TODO: Cleanup Jellyfin client, close connections
+
+            -- Stop any active playback
+            if state.api_client and state.api_client:is_playing() then
+                state.api_client:stop_playback()
+            end
         end
 
         events.emit('msg.debug.' .. adapter_id, { msg = {
