@@ -1,0 +1,24 @@
+---@meta _
+---
+-- ============================================================================
+-- Search Types
+-- ============================================================================
+---
+---Search activation data
+---@class SearchStartData
+---@field ctx_id NavCtxID Context requesting search
+---@field position number Current cursor position before search
+---
+---Search configuration in options
+---@class SearchConfig
+---@field case_sensitive boolean Whether search is case-sensitive (default: false)
+---@field search_fields string[] Which Item fields to search (default: {'primary_text', 'secondary_text'})
+---@field show_match_count boolean Show "Result X/Y" messages (default: true)
+---@field keybinds SearchKeybinds Keybind configuration
+---
+---Search keybind configuration
+---@class SearchKeybinds
+---@field next_result string[] Keys to navigate to next result (default: {'n'})
+---@field prev_result string[] Keys to navigate to previous result (default: {'N'})
+---@field select_result string[] Keys to select current result (default: {'ENTER'})
+---@field cancel string[] Keys to cancel search (default: {'ESC'})
