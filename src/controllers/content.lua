@@ -8,9 +8,9 @@ local hh_utils = require 'src.core.utils'
 ---@class content: Controller
 local content = {}
 
+---@class ContentState
+---@field adapter_apis table<AdapterID, AdapterAPI> Registered adapters
 local content_state = {
-    -- Registered adapters
-    ---@type table<AdapterID,AdapterAPI>
     adapter_apis = {},
 }
 
@@ -212,9 +212,9 @@ local handlers = {
     -- Content requests from Navigation controller
 
     ---@param event_name EventName
-    ---@param data ContentRequestData|EventData|nil
+    ---@param data ContentRequestData|EventData
     ['content.request'] = function(event_name, data)
-        if not data or not data.ctx_id or not data.nav_id then
+        if not data.ctx_id or not data.nav_id then
             hh_utils.emit_data_error(event_name, data, 'content')
             return
         end
@@ -247,9 +247,9 @@ local handlers = {
     end,
 
     ---@param event_name EventName
-    ---@param data ContentNavToData|EventData|nil
+    ---@param data ContentNavToData|EventData
     ['content.navigate_to'] = function(event_name, data)
-        if not data or not data.ctx_id or not data.nav_id or not data.selection then
+        if not data.ctx_id or not data.nav_id or not data.selection then
             hh_utils.emit_data_error(event_name, data, 'content')
             return
         end
@@ -264,15 +264,9 @@ local handlers = {
     -- Adapter registration and lifecycle events
 
     ---@param event_name EventName
-    ---@param data AdapterAPI|EventData|nil
+    ---@param data AdapterAPI|EventData
     ['content.register_adapter'] = function(event_name, data)
-        if not data
-            or not data.adapter_id
-            or not data.adapter_type
-            or not data.events
-            or not data.capabilities
-        then
-            hh_utils.emit_data_error(event_name, data, 'content')
+        if not hh_utils.validate_data(event_name, data, hh_utils.is_adapter_api, 'content') then
             return
         end
 
@@ -284,9 +278,9 @@ local handlers = {
     end,
 
     ---@param event_name EventName
-    ---@param data AdapterAPI|EventData|nil
+    ---@param data AdapterAPI|EventData
     ['content.unregister_adapter'] = function(event_name, data)
-        if not data or not data.adapter_id then
+        if not data.adapter_id then
             hh_utils.emit_data_error(event_name, data, 'content')
             return
         end
@@ -304,9 +298,9 @@ local handlers = {
     end,
 
     ---@param event_name EventName
-    ---@param data AdapterErrorData|EventData|nil
+    ---@param data AdapterErrorData|EventData
     ['content.adapter_error'] = function(event_name, data)
-        if not data or not data.adapter_id then
+        if not data.adapter_id then
             hh_utils.emit_data_error(event_name, data, 'content')
             return
         end

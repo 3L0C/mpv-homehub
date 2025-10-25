@@ -62,8 +62,39 @@ function hh_utils.validate_data(event_name, data, validator, controller)
     return true
 end
 
+---Is `map` a valid event map.
+---@param map? AdapterEventMap
+---@return boolean
+function hh_utils.is_event_map(map)
+    return type(map) == 'table'
+        and type(map.request) == 'string'
+        and type(map.navigate_to) == 'string'
+        and type(map.next) == 'string'
+        and type(map.prev) == 'string'
+end
+
+---Is `capabilities` a valid AdapterCapabilities object.
+---@param capabilities? AdapterCapabilities
+---@return boolean
+function hh_utils.is_adapter_capabilities(capabilities)
+    return type(capabilities) == 'table'
+        and type(capabilities.supports_search) == 'boolean'
+        and type(capabilities.supports_thumbnails) == 'boolean'
+        and type(capabilities.media_types) == 'table'
+end
+
+---Is `data` received during `content.register_adapter` event valid.
+---@param data? AdapterAPI
+function hh_utils.is_adapter_api(data)
+    return type(data) == 'table'
+        and type(data.adapter_id) == 'string'
+        and type(data.adapter_type) == 'string'
+        and hh_utils.is_event_map(data.events)
+        and hh_utils.is_adapter_capabilities(data.capabilities)
+end
+
 ---Is `data` received during `content.loaded` event.
----@param data ContentLoadedData|EventData
+---@param data? ContentLoadedData
 ---@return boolean
 function hh_utils.is_content_loaded(data)
     return  type(data) == 'table'
