@@ -12,6 +12,9 @@ local events = require 'src.core.events'
 ---@class hh_utils
 local hh_utils = {}
 
+---Coroutine utilities namespace
+hh_utils.coroutine = {}
+
 ---Read and parse JSON file at the given path.
 ---@param file_path string Path to JSON file (supports mpv path expansion like ~~/)
 ---@return table? data Parsed JSON data (nil on failure)
@@ -147,6 +150,22 @@ function hh_utils.emit_data_error(event_name, data, controller)
     } })
 end
 
+---Concatenate two arrays into a new array.
+---@generic T
+---@param array1 T[]
+---@param array2 T[]
+---@return T[]
+function hh_utils.table_concat(array1, array2)
+    local result = {}
+    for _, v in ipairs(array1) do
+        table.insert(result, v)
+    end
+    for _, v in ipairs(array2) do
+        table.insert(result, v)
+    end
+    return result
+end
+
 ---Formats strings for ass handling.
 ---This function is taken from the `mpv-file-browser` project.
 ---https://github.com/CogentRedTester/mpv-file-browser/blob/master/modules/utils.lua#L245
@@ -235,6 +254,116 @@ function hh_utils.handler_template(event_name, data, handlers, component)
                 ("Successfully handled event '%s'."):format(event_name)
             } })
         end
+    end
+end
+
+-- ============================================================================
+-- Coroutine Utilities
+-- ============================================================================
+-- These utilities are adapted from mpv-file-browser's coroutine helpers
+-- https://github.com/CogentRedTester/mpv-file-browser/blob/master/modules/utils.lua
+
+---Prints an error message and stack trace.
+---Can be passed directly to xpcall or used for coroutine error handling.
+---@param errmsg string Error message
+---@param co? thread Optional coroutine to grab stack trace from
+function hh_utils.traceback(errmsg, co)
+    local msg = require 'mp.msg'
+    if co then
+        msg.warn(debug.traceback(co))
+    else
+        msg.warn(debug.traceback("", 2))
+    end
+    msg.error(errmsg)
+end
+
+---Resumes a coroutine and prints an error if it was not successful.
+---Similar to coroutine.resume but with automatic error handling.
+---@param co thread Coroutine to resume
+---@param ... any Arguments to pass to the coroutine
+---@return boolean success Whether the coroutine resumed successfully
+function hh_utils.coroutine.resume_err(co, ...)
+    local success, err = coroutine.resume(co, ...)
+    if not success then
+        hh_utils.traceback(err, co)
+    end
+    return success
+end
+
+---Throws an error if not run from within a coroutine.
+---In lua 5.1 there is only one return value which will be nil if run from the main thread.
+---In lua 5.2+ main will be true if running from the main thread.
+---@param err? string Optional error message
+---@return thread co The current coroutine
+function hh_utils.coroutine.assert(err)
+    local co, main = coroutine.running()
+    assert(not main and co, err or "error - function must be executed from within a coroutine")
+    return co
+end
+
+---Creates a callback function to resume the current coroutine.
+---This is useful for async operations that need to resume the coroutine when complete.
+---@param time_limit? number Optional timeout in seconds
+---@return fun(...) callback Function that resumes the coroutine with the given arguments
+function hh_utils.coroutine.callback(time_limit)
+    local co = hh_utils.coroutine.assert("cannot create a coroutine callback for the main thread")
+    local timer = time_limit and mp.add_timeout(time_limit, function()
+        events.emit('msg.debug.coroutine', { msg = { 'Time limit on callback expired' } })
+        hh_utils.coroutine.resume_err(co, false)
+    end)
+
+    local function fn(...)
+        if timer then
+            if not timer:is_enabled() then return
+            else timer:kill() end
+            return hh_utils.coroutine.resume_err(co, true, ...)
+        end
+        return hh_utils.coroutine.resume_err(co, ...)
+    end
+    return fn
+end
+
+---Puts the current coroutine to sleep for the given number of seconds.
+---@async
+---@param seconds number Duration to sleep in seconds
+function hh_utils.coroutine.sleep(seconds)
+    mp.add_timeout(seconds, hh_utils.coroutine.callback())
+    coroutine.yield()
+end
+
+---Runs the given function in a new coroutine immediately.
+---This is for triggering an async event in a coroutine.
+---@param fn async fun(...) Async function to run
+---@param ... any Arguments to pass to the function
+---@return thread co The created coroutine
+function hh_utils.coroutine.run(fn, ...)
+    local co = coroutine.create(fn)
+    hh_utils.coroutine.resume_err(co, ...)
+    return co
+end
+
+---Runs the given function in a new coroutine on the next tick.
+---Does not run the coroutine immediately, instead queues it to run when the thread is next idle.
+---Returns the coroutine object so the caller can act on it before it runs.
+---@param fn async fun(...) Async function to run
+---@param ... any Arguments to pass to the function
+---@return thread co The created coroutine
+function hh_utils.coroutine.queue(fn, ...)
+    local co = coroutine.create(fn)
+    local args = table.pack(...)
+    mp.add_timeout(0, function()
+        hh_utils.coroutine.resume_err(co, table.unpack(args, 1, args.n))
+    end)
+    return co
+end
+
+---Implements table.pack for Lua 5.1 compatibility.
+---In Lua 5.2+ this is built-in.
+if not table.pack then
+    table.unpack = unpack ---@diagnostic disable-line deprecated
+    ---@diagnostic disable-next-line: duplicate-set-field
+    function table.pack(...)
+        return {n = select("#", ...), ...}
     end
 end
 

@@ -2,8 +2,6 @@
 --  Text UI controller.
 --]]
 
-local mp = require 'mp'
-
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
 local options = require 'src.core.options'
@@ -11,23 +9,26 @@ local options = require 'src.core.options'
 ---@class ui_text: Controller
 local ui_text = {}
 
+---@class TextState
+---@field id NavCtxID
+---@field active boolean
+---@field visible boolean
+---@field needs_render boolean
+---@field keybinds TextKeyTable
+---@field keybinds_active boolean
+---@field keybinds_set boolean
+---@field cursor_pos number
+---@field current_items Item[] 
 local text_state = {
-    ---@type NavCtxID
     id = 'text',
-    ---@type boolean
     active = false,
-    ---@type boolean
     visible = false,
-    ---@type boolean
     needs_render = true,
-    ---@type TextKeyTable
     keybinds = {},
-    ---@type boolean
     keybinds_active = false,
-    ---@type boolean
     keybinds_set = false,
-    ---@type number
     cursor_pos = 1,
+    current_items = {},
 }
 
 ---Set the keybind table to user defined keys or defaults
@@ -58,27 +59,43 @@ end
 local function bind_keys()
     if text_state.keybinds_active then return true end
 
-    hh_utils.bind_keys(text_state.keybinds.up,
-                       'nav.up',
-                       'ui_text.active',
-                       nil,
-                       { repeatable = true })
-    hh_utils.bind_keys(text_state.keybinds.down,
-                       'nav.down',
-                       'ui_text.active',
-                       nil,
-                       { repeatable = true})
-    hh_utils.bind_keys(text_state.keybinds.back,
-                       'nav.back',
-                       'ui_text.active',
-                       nil,
-                       { repeatable = true})
-    hh_utils.bind_keys(text_state.keybinds.select,
-                       'nav.select',
-                       'ui_text.active')
-    hh_utils.bind_keys(text_state.keybinds.multiselect,
-                       'nav.multiselect',
-                       'ui_text.active')
+    hh_utils.bind_keys(
+        text_state.keybinds.up,
+        'nav.up',
+        'ui_text.active',
+        nil,
+        { repeatable = true }
+    )
+    hh_utils.bind_keys(
+        text_state.keybinds.down,
+        'nav.down',
+        'ui_text.active',
+        nil,
+        { repeatable = true}
+    )
+    hh_utils.bind_keys(
+        text_state.keybinds.back,
+        'nav.back',
+        'ui_text.active',
+        nil,
+        { repeatable = true}
+    )
+    hh_utils.bind_keys(
+        text_state.keybinds.select,
+        'nav.select',
+        'ui_text.active'
+    )
+    hh_utils.bind_keys(
+        text_state.keybinds.multiselect,
+        'nav.multiselect',
+        'ui_text.active'
+    )
+    hh_utils.bind_keys(
+        text_state.keybinds.search,
+        'ui.push_overlay',
+        'ui_text.active',
+        { overlay = 'search' }
+    )
     -- TODO: implement actual events for these keys
     -- hh_utils.bind_keys(text_state.keys.page_up, '', 'ui_text')
     -- hh_utils.bind_keys(text_state.keys.page_down, '', 'ui_text')
@@ -126,12 +143,16 @@ local handlers = {
 
     ['ui.text.show'] = function(_, _)
         bind_keys()
-        events.emit('text_renderer.show')
+        events.emit('text_renderer.render', {
+            items = text_state.current_items,
+            cursor_pos = text_state.cursor_pos,
+            force_show = true,
+        } --[[@as TextRendererRenderData]])
     end,
 
     ['ui.text.hide'] = function(_, _)
         unbind_keys()
-        events.emit('text_renderer.hide')
+        events.emit('text_renderer.clear')
     end,
 
     -- Navigation events
@@ -219,7 +240,7 @@ local handlers = {
 
     ---@param event_name EventName
     ---@param data NavSelectedData|EventData
-    ['nav.selected'] = function (event_name, data)
+    ['nav.selected'] = function(event_name, data)
         if not hh_utils.validate_data(event_name, data, hh_utils.is_nav_selected, 'ui_text') then
             return
         end
@@ -229,6 +250,17 @@ local handlers = {
             nav_id = data.nav_id,
             selection = data.position,
         } --[[@as ContentNavToData]])
+    end,
+
+    -- Search events
+    ---Activate search on current items
+    ['search.activate.text'] = function(_, _)
+        if not text_state.active then return end
+
+        events.emit('search.start', {
+            ctx_id = text_state.id,
+            position = text_state.cursor_pos,
+        } --[[@as SearchStartData]])
     end,
 
     -- Content events
@@ -242,6 +274,8 @@ local handlers = {
 
         if data.ctx_id ~= text_state.id then return end
 
+        text_state.current_items = data.items
+
         events.emit('nav.navigate_to', {
             ctx_id = text_state.id,
             nav_id = data.nav_id,
@@ -251,7 +285,7 @@ local handlers = {
         } --[[@as NavNavigateToData]])
 
         events.emit('text_renderer.render', {
-            items = data.items,
+            items = text_state.current_items,
             cursor_pos = text_state.cursor_pos,
         } --[[@as TextRendererRenderData]])
     end,
@@ -265,6 +299,8 @@ local handlers = {
         end
 
         if data.ctx_id ~= text_state.id then return end
+
+        text_state.current_items = {}
 
         events.emit('text_renderer.render', {
             items = {

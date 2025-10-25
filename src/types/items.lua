@@ -11,7 +11,7 @@
 --- Visual styling hints (optional, for text/list views)
 ---@field prefix_icon? string Optional leading icon/symbol
 ---@field suffix_text? string Optional trailing text/info
----@field style_variant? 'default'|'accent'|'secondary'|'muted' Visual style hint
+---@field style_variant? 'default'|'header'|'accent'|'secondary'|'muted' Visual style hint
 ---@field highlight? boolean Whether to highlight this item
 ---@field indent_level? number Visual indentation level (0-based)
 ---

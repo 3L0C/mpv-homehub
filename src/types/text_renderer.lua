@@ -1,0 +1,10 @@
+---@meta _
+---
+---Represents the data sent to the `text_renderer.render` event.
+---This is the primary interface for requesting text rendering updates.
+---@class TextRendererRenderData
+---@field items? Item[] Array of display items to render
+---@field cursor_pos? number Visual cursor position
+---@field selection? Set<number> Selection state mapping
+---@field force_update? boolean Force refresh even if no changes detected
+---@field force_show? boolean Force show renderer in case it might be hidden

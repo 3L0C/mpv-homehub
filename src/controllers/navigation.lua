@@ -473,7 +473,7 @@ local handlers = {
     ---Set the state for the current nav_id of data.ctx_id
     ---@param event_name EventName
     ---@param data NavSetStateData|EventData|nil
-    ['nav.set_state'] = function (event_name, data)
+    ['nav.set_state'] = function(event_name, data)
         if not data or not data.ctx_id then
             hh_utils.emit_data_error(event_name, data, 'navigation')
             return

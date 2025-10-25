@@ -177,7 +177,7 @@ local handlers = {
     ---Unbind all keys belonging to a group.
     ---@param event_name EventName
     ---@param data InputUnbindData
-    ['input.unbind_group'] = function (event_name, data)
+    ['input.unbind_group'] = function(event_name, data)
         if not data or not data.group or type(data.group) ~= 'string' then
             hh_utils.emit_data_error(event_name, data, 'input')
             return

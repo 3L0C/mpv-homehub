@@ -2,8 +2,6 @@
 --  Jellyfin adapter
 --]]
 
-local utils = require 'mp.utils'
-
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
 

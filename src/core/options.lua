@@ -51,6 +51,11 @@ local options = {
 
     -- Adapter configuration
     adapter_config_file = '~~/script-opts/homehub-adapters.json',
+
+    -- Search configuration
+    search_case_sensitive = false,
+    search_show_match_count = true,
+    search_fields = 'primary_text,secondary_text',
 }
 
 function options.init()
@@ -65,6 +70,24 @@ function options.init()
     end
 
     options.keybinds = keybind_table or {}
+
+    -- Parse search configuration
+    options.search = {
+        case_sensitive = options.search_case_sensitive,
+        show_match_count = options.search_show_match_count,
+        search_fields = {},
+        keybinds = keybind_table and keybind_table.search or {},
+    }
+
+    -- Parse search_fields from comma-separated string to table
+    for field in options.search_fields:gmatch('[^,]+') do
+        table.insert(options.search.search_fields, field:match('^%s*(.-)%s*$')) -- trim whitespace
+    end
+
+    -- Defaults if empty
+    if #options.search.search_fields == 0 then
+        options.search.search_fields = {'primary_text', 'secondary_text'}
+    end
 end
 
 return options

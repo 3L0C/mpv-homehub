@@ -430,7 +430,7 @@ local handlers = {
 
     ---@param event_name EventName
     ---@param data UiUpdateData|EventData|nil
-    ['ui.update'] = function (event_name, data)
+    ['ui.update'] = function(event_name, data)
         if not data then return end
 
         if type(data.cursor_pos) == 'number' then

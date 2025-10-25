@@ -9,14 +9,6 @@ local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
 local options  = require 'src.core.options'
 
----Represents the data sent to the `text_renderer.render` event.
----This is the primary interface for requesting text rendering updates.
----@class TextRendererRenderData
----@field items? Item[] Array of display items to render
----@field cursor_pos? number Visual cursor position
----@field selection? Set<number> Selection state mapping
----@field force_update? boolean Force refresh even if no changes detected
-
 ---@class text_renderer: View
 local text_renderer = {}
 
@@ -260,7 +252,11 @@ end
 ---Render cursor for given item position
 ---@param position number
 local function render_cursor(position)
-    if position == renderer_state.cursor_position then
+    local style = renderer_state.display_items[position].style_variant or 'default'
+
+    if style ~= 'default' then
+        append_to_buffer('\\h\\h\\h')
+    elseif position == renderer_state.cursor_position then
         if renderer_state.selection_state[position] then
             append_to_buffer(renderer_state.style.cursor, options.cursor_selected_icon, '\\h')
         else
@@ -471,6 +467,11 @@ local handlers = {
         -- Force update if requested
         if data.force_update then
             renderer_state.needs_update = true
+        end
+
+        -- Force show if requested
+        if data.force_show then
+            renderer_state.active = true
         end
 
         -- Render if update needed
