@@ -260,7 +260,8 @@ end
 ---Main search coroutine - prompts for input and filters items.
 ---@async
 local function search_coroutine()
-    search_state.active_coroutine = coroutine.running()
+    local co = hh_utils.coroutine.assert("cannot create a coroutine callback for the main thread")
+    search_state.active_coroutine = co
 
     -- Get current items and position
     local items = search_state.original_items
@@ -280,10 +281,6 @@ local function search_coroutine()
         force_show = true,
     } --[[@as TextRendererRenderData]])
 
-    -- search_state.parent_ctx_id = ctx_id
-    -- search_state.original_items = items
-    -- search_state.original_position = position
-
     -- Check if mp.input is available
     local input_loaded, input = pcall(require, 'mp.input')
     if not input_loaded then
@@ -299,7 +296,6 @@ local function search_coroutine()
     events.emit('msg.debug.ui_search', { msg = {
         'Starting search',
         'Item count:', #items,
-        -- 'Original position:', position
     }})
 
     -- Prompt for search query
@@ -307,16 +303,29 @@ local function search_coroutine()
         prompt = "Search: ",
         id = "homehub/search",
         default_text = "",
-        submit = hh_utils.coroutine.callback(),
+        submit = function(text)
+            hh_utils.coroutine.resume_err(co, true, text)  -- Submitted
+        end,
+        closed = function(text)
+            hh_utils.coroutine.resume_err(co, false, text)  -- Cancelled
+        end,
     })
 
     -- Wait for user input
-    local query, err = coroutine.yield()
+    local submitted, query = coroutine.yield()
     input.terminate()
 
     -- Handle cancellation
-    if not query then
-        events.emit('msg.debug.ui_search', { msg = { 'Search cancelled:', err }})
+    if not submitted then
+        events.emit('msg.debug.ui_search', { msg = { 'Search cancelled' }})
+        events.emit('ui.pop_overlay', { overlay = search_state.id })
+        search_state.active_coroutine = nil
+        return
+    end
+
+    -- Validate query
+    if not query or query == '' then
+        events.emit('msg.warn.ui_search', { msg = { 'Empty search query' }})
         events.emit('ui.pop_overlay', { overlay = search_state.id })
         search_state.active_coroutine = nil
         return
@@ -468,7 +477,9 @@ function ui_search.init()
     configure_search()
 
     -- Register as UI overlay
-    events.emit('ui.register_overlay', { overlay = search_state.id })
+    events.on('sys.prep', function(_, _)
+        events.emit('ui.register_overlay', { overlay = search_state.id })
+    end, 'ui_search')
 
     -- Register event handlers
     for event in pairs(handlers) do
