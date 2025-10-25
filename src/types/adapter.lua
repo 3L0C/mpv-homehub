@@ -1,6 +1,7 @@
 ---@meta _
 
 ---@alias AdapterID string
+---@alias AdapterName string
 ---
 ---@class Adapter
 ---@field api_version string Semantic version (e.g., '1.0.0')
@@ -9,7 +10,7 @@
 ---
 ---@class AdapterConfig
 ---@field id string Unique identifier for this adapter instance
----@field display_name string Human-readable name for UI display
+---@field display_name AdapterName Human-readable name for UI display
 ---@field type 'jellyfin'|'emby'|'plex'|'subsonic'|'other' Adapter type
 ---@field external? boolean Whether this adapter is external or not (default: false)
 ---@field enabled? boolean Whether this adapter should be loaded (default: true)

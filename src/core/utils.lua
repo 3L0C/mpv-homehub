@@ -10,7 +10,10 @@ local events = require 'src.core.events'
 ---@alias HandlerTable table<EventName,ListenerCB>
 
 ---@class hh_utils
-local hh_utils = {}
+---@field separator string
+local hh_utils = {
+    separator = '────────────────────────────────',
+}
 
 ---Coroutine utilities namespace
 hh_utils.coroutine = {}
@@ -67,6 +70,8 @@ function hh_utils.is_content_loaded(data)
         and type(data.ctx_id) == 'string'
         and type(data.nav_id) == 'string'
         and type(data.items) == 'table'
+        and type(data.adapter_name) == 'string'
+        and type(data.content_title) == 'string'
 end
 
 ---Encode `prefix` and `rest` into a valid nav_id.
@@ -206,7 +211,7 @@ end
 ---Key bind helper.
 ---@param keys string[]
 ---@param event_name EventName
----@param group_name InputGroup 
+---@param group_name InputGroup
 ---@param ctx? InputCtx
 ---@param flags? InputFlags
 ---@return boolean

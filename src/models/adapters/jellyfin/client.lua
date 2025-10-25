@@ -219,7 +219,7 @@ function JellyfinClient:get_item(item_id)
         return nil, 'not authenticated'
     end
 
-    local path = '/Users/' .. self.user_id .. '/Items/' .. item_id
+    local path = '/Items/' .. item_id .. '?' .. http.build_query({ userId = self.user_id })
     return self:request('GET', path)
 end
 

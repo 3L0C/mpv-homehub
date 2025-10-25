@@ -18,7 +18,9 @@ local ui_text = {}
 ---@field keybinds_active boolean
 ---@field keybinds_set boolean
 ---@field cursor_pos number
----@field current_items Item[] 
+---@field current_header? TextRendererZone
+---@field current_items Item[]
+---@field breadcrumb string[]
 local text_state = {
     id = 'text',
     active = false,
@@ -28,7 +30,9 @@ local text_state = {
     keybinds_active = false,
     keybinds_set = false,
     cursor_pos = 1,
+    current_header = nil,
     current_items = {},
+    breadcrumb = {},
 }
 
 ---Set the keybind table to user defined keys or defaults
@@ -114,6 +118,43 @@ local function unbind_keys()
     text_state.keybinds_active = false
 end
 
+---Format breadcrumb showing only last N components
+---@param trail string[]
+---@param max_tail? number How many trailing components to show (default: 3)
+---@return string
+local function format_breadcrumb(trail, max_tail)
+    max_tail = max_tail or 3
+    local count = #trail
+
+    -- If trail fits within limit, show it all
+    if count <= max_tail then
+        return table.concat(trail, ' / ')
+    end
+
+    -- Build tail: ... / component / component
+    local parts = {'...'}
+    for i = count - max_tail + 1, count do
+        table.insert(parts, trail[i])
+    end
+
+    return table.concat(parts, ' / ')
+end
+
+---@return string breadcrumb
+local function get_breadcrumb()
+    return format_breadcrumb(text_state.breadcrumb)
+end
+
+---@param crumb string
+local function push_crumb(crumb)
+    table.insert(text_state.breadcrumb, crumb)
+end
+
+---@return string? crumb
+local function pop_crumb()
+    return table.remove(text_state.breadcrumb)
+end
+
 ---@type HandlerTable
 local handlers = {
 
@@ -122,6 +163,7 @@ local handlers = {
     ['ui.text.activate'] = function(_, _)
         text_state.active = true
         text_state.visible = true
+        text_state.breadcrumb = {}
         bind_keys()
         events.emit('text_renderer.show')
         events.emit('nav.context_push', { ctx_id = text_state.id } --[[@as NavContextPushData]])
@@ -135,6 +177,7 @@ local handlers = {
     ['ui.text.deactivate'] = function(_, _)
         text_state.active = false
         text_state.visible = false
+        text_state.breadcrumb = {}
         events.emit('text_renderer.hide')
         unbind_keys()
         events.emit('nav.context_pop', { ctx_id = text_state.id } --[[@as NavContextPopData]])
@@ -144,7 +187,18 @@ local handlers = {
     ['ui.text.show'] = function(_, _)
         bind_keys()
         events.emit('text_renderer.render', {
-            items = text_state.current_items,
+            header = text_state.current_header,
+            body = {
+                items = text_state.current_items,
+            },
+            footer = {
+                items = {
+                    {
+                        primary_text = '/ - Search, ? - Help',
+                    },
+                },
+                style = 'spacious',
+            },
             cursor_pos = text_state.cursor_pos,
             force_show = true,
         } --[[@as TextRendererRenderData]])
@@ -196,22 +250,18 @@ local handlers = {
         if data.ctx_id ~= text_state.id then return end
 
         if data.trigger == 'back' then
+            -- Update breadcrumb
+            pop_crumb() -- Current crumb
+            pop_crumb() -- Parent crumb
+
             -- Load previous data
             events.emit('content.request', {
                 ctx_id = text_state.id,
                 nav_id = data.nav_id,
             } --[[@as ContentRequestData]])
-
-            -- Update cursor if needed
-            if text_state.cursor_pos ~= data.position then
-                events.emit('nav.pos_changed', {
-                    ctx_id = data.ctx_id,
-                    position = data.position,
-                    old_position = text_state.cursor_pos,
-                } --[[@as NavPositionChangedData]])
-            end
         end
 
+        -- Update cursor if needed
         if text_state.cursor_pos ~= data.position then
             events.emit('nav.pos_changed', {
                 ctx_id = data.ctx_id,
@@ -284,8 +334,44 @@ local handlers = {
             total_items = #data.items,
         } --[[@as NavNavigateToData]])
 
+        if data.content_title ~= '' then
+            push_crumb(data.content_title)
+        end
+
+        local header_text = data.adapter_name
+
+        if #text_state.breadcrumb ~= 0 then
+            header_text = header_text .. ': ' .. get_breadcrumb()
+        end
+
+        -- Cache header
+        text_state.current_header = {
+            items = {
+                {
+                    primary_text = header_text,
+                    style_variant = 'header',
+                },
+                {
+                    primary_text = hh_utils.separator,
+                    style_variant = 'secondary',
+                },
+            },
+            style = 'compact',
+        }
+
         events.emit('text_renderer.render', {
-            items = text_state.current_items,
+            header = text_state.current_header,
+            body = {
+                items = text_state.current_items,
+            },
+            footer = {
+                items = {
+                    {
+                        primary_text = '/ - Search, ? - Help',
+                    },
+                },
+                style = 'spacious',
+            },
             cursor_pos = text_state.cursor_pos,
         } --[[@as TextRendererRenderData]])
     end,
@@ -303,11 +389,22 @@ local handlers = {
         text_state.current_items = {}
 
         events.emit('text_renderer.render', {
-            items = {
-                {
-                    primary_text = 'Loading...',
-                }
-            }
+            header = text_state.current_header,
+            body = {
+                items = {
+                    {
+                        primary_text = 'Loading...',
+                    },
+                },
+            },
+            footer = {
+                items = {
+                    {
+                        primary_text = '/ - Search, ? - Help',
+                    },
+                },
+                style = 'spacious',
+            },
         } --[[@as TextRendererRenderData]])
     end,
 

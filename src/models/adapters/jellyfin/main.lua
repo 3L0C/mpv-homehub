@@ -18,6 +18,7 @@ local adapter = {
 ---@class JellyfinAdapterState: AdapterState
 ---@field api_client JellyfinClient?
 ---@field current_items JellyfinItem[]
+---@field parent_item? JellyfinItem
 ---
 ---Registry of adapter instances
 ---@type table<AdapterID, JellyfinAdapterState>
@@ -35,6 +36,7 @@ local function get_instance(adapter_id)
             auth_failed = false,
             api_client = nil,
             current_items = {},
+            parent_item = nil,
             api = {
                 adapter_id = adapter_id,
                 adapter_name = 'Jellyfin',
@@ -199,8 +201,22 @@ local function handle_request(event_name, data)
         return
     end
 
+    ---@type JellyfinItem?
+    local item = nil
+    if data.nav_id ~= '' then
+        item, err = state.api_client:get_item(data.nav_id)
+    end
+
+    if not item then
+        events.emit('msg.warn.' .. state.api.adapter_id, { msg = {
+            'Could not get item for nav_id:', data.nav_id or 'NONE'
+        } })
+        item = { Name = 'Libraries', Type = 'Root', Id = '' }
+    end
+
     -- Cache the fetched items
     state.current_items = jellyfin_items or {}
+    state.parent_item = item
 
     -- Transform Jellyfin items to HomeHub Item format
     local items = {}
@@ -215,6 +231,8 @@ local function handle_request(event_name, data)
         ctx_id = data.ctx_id,
         nav_id = nav_id,
         items = items,
+        adapter_name = state.api.adapter_name,
+        content_title = state.parent_item.Name,
     } --[[@as ContentLoadedData]])
 end
 
@@ -272,8 +290,9 @@ local function handle_navigate_to(event_name, data)
             return
         end
 
-        -- Cache new items
+        -- Cache items
         state.current_items = children or {}
+        state.parent_item = selected_item
 
         -- Transform and emit
         local items = {}
@@ -288,6 +307,8 @@ local function handle_navigate_to(event_name, data)
             ctx_id = data.ctx_id,
             nav_id = nav_id,
             items = items,
+            adapter_name = state.api.adapter_name,
+            content_title = state.parent_item and state.parent_item.Name or 'unknown'
         } --[[@as ContentLoadedData]])
     else
         -- Play the file

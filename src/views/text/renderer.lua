@@ -243,14 +243,14 @@ local function initialize_styles()
     style.header = ([[{\r\q2\b1\fs%d\fn%s\c&H%s&}]]):format(
         math.floor(options.scaling_factor_body * BASE_FONT_SIZE * 1.1),
         options.font_name_body,
-        options.font_color_accent
+        options.font_color_header
     )
 
     -- Footer style (smaller, secondary color)
     style.footer = ([[{\r\q2\fs%d\fn%s\c&H%s&}]]):format(
         math.floor(options.scaling_factor_body * BASE_FONT_SIZE * 0.9),
         options.font_name_body,
-        options.font_color_secondary
+        options.font_color_footer
     )
 
     -- Cursor style

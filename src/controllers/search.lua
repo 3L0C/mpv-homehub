@@ -114,7 +114,7 @@ local function render_search_results()
                         style_variant = 'accent',
                     },
                     {
-                        primary_text = '────────────────────────────────',
+                        primary_text = hh_utils.separator,
                         style_variant = 'secondary',
                     },
                 },
@@ -124,7 +124,7 @@ local function render_search_results()
                 items = search_state.filtered_items,
             },
             cursor_pos = search_state.current_position,
-        })
+        } --[[@as TextRendererRenderData]])
     else
         -- No header, just body
         events.emit('text_renderer.render', {
@@ -219,12 +219,6 @@ end
 ---Cancel search and restore original position.
 local function cancel_search()
     events.emit('msg.debug.ui_search', { msg = { 'Search cancelled' }})
-
-    -- -- Restore original position
-    -- events.emit('nav.set_state', {
-    --     ctx_id = search_state.parent_ctx_id,
-    --     position = search_state.original_position,
-    -- })
 
     -- Pop overlay
     events.emit('ui.pop_overlay', { overlay = search_state.id })

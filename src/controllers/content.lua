@@ -112,6 +112,8 @@ local function handle_root_request(ctx_id)
         ctx_id = ctx_id,
         nav_id = '',
         items = items,
+        adapter_name = 'Adapters',
+        content_title = '',
     } --[[@as ContentLoadedData]])
 end
 

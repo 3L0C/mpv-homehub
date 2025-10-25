@@ -20,6 +20,8 @@
 ---@field ctx_id NavCtxID
 ---@field nav_id NavID
 ---@field items Item[]
+---@field adapter_name AdapterName
+---@field content_title string 
 ---
 ---@class ContentErrorData
 ---@field ctx_id NavCtxID

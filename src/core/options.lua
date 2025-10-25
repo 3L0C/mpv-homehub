@@ -27,7 +27,9 @@ local options = {
 
     -- Font settings
     font_name_body = 'mpv-osd-symbols',
+    font_color_header = 'cccccc',
     font_color_body = 'ffffff',
+    font_color_footer = '888888',
     font_color_cursor = '00ccff',
     font_color_selected = '00ff00',
     font_color_multiselect = 'fcad88',

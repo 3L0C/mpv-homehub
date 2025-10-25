@@ -4,7 +4,7 @@
 ---Adapters populate what they have, views use what they need.
 ---@class Item
 ---
---- Core display fields (always present)
+---Core display fields (always present)
 ---@field primary_text string Main display text
 ---@field secondary_text? string Optional secondary display text
 ---
@@ -15,12 +15,12 @@
 ---@field highlight? boolean Whether to highlight this item
 ---@field indent_level? number Visual indentation level (0-based)
 ---
---- Rich metadata (optional, for gallery/grid views)
+---Rich metadata (optional, for gallery/grid views)
 ---@field thumbnail_url? string URL/path to thumbnail image
 ---@field image_aspect_ratio? number Aspect ratio for image display (e.g., 16/9)
 ---@field duration_seconds? number Media duration in seconds
 ---@field media_type? 'video'|'audio'|'image'|'folder'|'other' Content type
 ---@field file_size? number File size in bytes
 ---
---- Extended metadata (optional, adapter-specific)
+---Extended metadata (optional, adapter-specific)
 ---@field metadata? table Any additional adapter-specific data
