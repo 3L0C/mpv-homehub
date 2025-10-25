@@ -1,6 +1,8 @@
 --[[
---  Text renderer view.
+--  Text renderer view with layout zones.
 --  Pure presentation component for displaying structured text content in mpv
+--
+--  Supports both simple lists and zoned layouts (header/body/footer)
 --]]
 
 local mp       = require 'mp'
@@ -27,33 +29,50 @@ local renderer_state = {
     active = false,
     initialized = false,
 
-    -- Content state
-    ---@type Item[]
-    display_items = {},
-    empty_text = 'No items available.',
-
-    -- Navigation state
-    cursor_position = 1,
-    ---@type Set<number>
-    selection_state = {},
+    -- Layout zones (new architecture)
+    header = {
+        items = {},             -- Header items (non-navigable)
+        item_count = 0,         -- Computed height in lines
+        style = 'compact',      -- Layout style
+    },
+    body = {
+        items = {},             -- Main content (navigable)
+        cursor_position = 1,    -- Cursor position within body
+        selection_state = {},   -- Selection state for body items
+        empty_text = 'No items available.',
+    },
+    footer = {
+        items = {},             -- Footer items (non-navigable)
+        item_count = 0,         -- Computed height in lines
+        style = 'compact',      -- Layout style
+    },
 
     -- Dynamic geometry (inspired by `mpv-gallery-view`)
     geometry = {
         screen_width = 1920,
         screen_height = 1080,
         line_height = BASE_FONT_SIZE * 1.2,  -- 20% spacing like gallery-view
-        available_height = 0,                -- Usable screen area for text
-        margin_top = 0,                      -- Top margin for centering
-        margin_bottom = 0,                   -- Bottom margin
-        max_items = 20,                      -- Maximum displayable items (dynamic)
-        ok = false,                          -- Whether geometry is properly initialized
+
+        -- Zone heights (in lines)
+        header_height = 0,       -- Reserved lines for header
+        body_height = 0,         -- Available lines for body
+        footer_height = 0,       -- Reserved lines for footer
+
+        -- Margins
+        margin_top = 0,          -- Top margin for centering
+        margin_bottom = 0,       -- Bottom margin
+
+        -- Virtual resolution
+        virtual_height = 720,    -- ASS virtual height
+
+        ok = false,              -- Whether geometry is properly initialized
     },
 
     -- Viewport calculation (enhanced from file-browser)
     view_window = {
-        start = 1,              -- First visible item index
-        finish = 0,             -- Last visible item index
-        overflow = false,       -- Whether content exceeds viewport
+        start = 1,              -- First visible body item index
+        finish = 0,             -- Last visible body item index
+        overflow = false,       -- Whether body content exceeds viewport
     },
 
     -- ASS rendering
@@ -67,6 +86,8 @@ local renderer_state = {
     style = {
         global = '',            -- Global alignment/base style
         body = '',              -- Normal item text
+        header = '',            -- Header style
+        footer = '',            -- Footer style
         selected = '',          -- Selected item highlight
         cursor = '',            -- Cursor icon/marker
         multiselect = '',       -- Multi-selected items
@@ -76,54 +97,96 @@ local renderer_state = {
     },
 }
 
----Dynamic geometry calculation (inspired by `mpv-gallery-view`).
+---Calculate zone heights and update geometry
+local function calculate_zone_heights()
+    local g = renderer_state.geometry
+
+    -- Calculate header height (1 line per item, with extra spacing for 'spacious')
+    local header_lines = 0
+    if #renderer_state.header.items > 0 then
+        header_lines = #renderer_state.header.items
+        if renderer_state.header.style == 'spacious' then
+            header_lines = header_lines + 1  -- Add blank line after header
+        end
+    end
+
+    -- Calculate footer height
+    local footer_lines = 0
+    if #renderer_state.footer.items > 0 then
+        footer_lines = #renderer_state.footer.items
+        if renderer_state.footer.style == 'spacious' then
+            footer_lines = footer_lines + 1  -- Add blank line before footer
+        end
+    end
+
+    g.header_height = header_lines
+    g.footer_height = footer_lines
+
+    -- Calculate remaining height for body
+    local virtual_height = g.virtual_height
+    local margin_ratio = options.screen_margin_ratio
+    local total_margin = virtual_height * margin_ratio * 2 -- Top + bottom
+    local available_height = math.max(g.line_height, virtual_height - total_margin)
+
+    -- Subtract zone heights from available height
+    local reserved_height = (header_lines + footer_lines) * g.line_height
+    local body_available = math.max(g.line_height, available_height - reserved_height)
+
+    -- Calculate maximum displayable body items
+    local max_body_items = math.floor(body_available / g.line_height)
+    g.body_height = math.max(1, max_body_items)
+
+    -- Calculate centering margins
+    local total_used_height = (header_lines + g.body_height + footer_lines) * g.line_height
+    local remaining_height = virtual_height - total_used_height
+    g.margin_top = math.max(0, remaining_height / 2)
+    g.margin_bottom = remaining_height - g.margin_top
+end
+
+---Dynamic geometry calculation with layout zones
 ---https://github.com/occivink/mpv-gallery-view
----Calculates maximum displayable items based on screen dimensions.
+---Calculates maximum displayable items based on screen dimensions and zone layouts.
+---IMPORTANT: Uses virtual resolution (res_y) for ASS coordinate space calculations.
 local function compute_text_geometry()
     local g = renderer_state.geometry
 
     -- Update line height based on current font size
     g.line_height = options.scaling_factor_body * BASE_FONT_SIZE * 1.2
 
-    -- Calculate available height with margins (like gallery-view's 90% approach)
-    local margin_ratio = options.screen_margin_ratio
-    local total_margin = g.screen_height * margin_ratio * 2 -- Top + bottom
-    g.available_height = math.max(g.line_height, g.screen_height - total_margin)
+    -- Use virtual resolution for calculations (since overlay uses res_y = 720)
+    -- All ASS rendering happens in this virtual space, NOT actual screen pixels
+    g.virtual_height = renderer_state.overlay and renderer_state.overlay.res_y or 720
 
-    -- Calculate maximum displayable items
-    local max_items = math.floor(g.available_height / g.line_height)
-    g.max_items = math.max(1, max_items)
-
-    -- Calculate centering margins (like gallery-view's effective_spacing)
-    local used_height = g.max_items * g.line_height
-    local remaining_height = g.screen_height - used_height
-    g.margin_top = math.max(0, remaining_height / 2)
-    g.margin_bottom = remaining_height - g.margin_top
+    -- Calculate zone heights
+    calculate_zone_heights()
 
     g.ok = true
 
     events.emit('msg.debug.text_renderer', { msg = {
         'Computed geometry:',
-        'srceen=' .. g.screen_width .. 'x' .. g.screen_height,
-        'max_items=' .. g.max_items,
+        'screen=' .. g.screen_width .. 'x' .. g.screen_height,
+        'virtual=' .. g.virtual_height,
+        'header=' .. g.header_height,
+        'body=' .. g.body_height,
+        'footer=' .. g.footer_height,
         'line_height=' .. g.line_height,
         'margin_top=' .. g.margin_top,
     } })
 end
 
----Enhanced viewport calculation (based on `mpv-file-browser` + centering from `mpv-gallery-view`)
+---Enhanced viewport calculation for body zone
 ---@return number start_index
 ---@return number end_index
 ---@return boolean has_overflow
 local function calculate_view_window()
-    local item_count = #renderer_state.display_items
-    local max_displayable = renderer_state.geometry.max_items
+    local item_count = #renderer_state.body.items
+    local max_displayable = renderer_state.geometry.body_height
 
     if item_count == 0 then
         return 1, 0, false
     end
 
-    local cursor_pos = renderer_state.cursor_position
+    local cursor_pos = renderer_state.body.cursor_position
     local start_pos = 1
     local end_pos = math.min(item_count, max_displayable)
 
@@ -174,6 +237,20 @@ local function initialize_styles()
         options.scaling_factor_body * BASE_FONT_SIZE,
         options.font_name_body,
         options.font_color_body
+    )
+
+    -- Header style (slightly larger, bold)
+    style.header = ([[{\r\q2\b1\fs%d\fn%s\c&H%s&}]]):format(
+        math.floor(options.scaling_factor_body * BASE_FONT_SIZE * 1.1),
+        options.font_name_body,
+        options.font_color_accent
+    )
+
+    -- Footer style (smaller, secondary color)
+    style.footer = ([[{\r\q2\fs%d\fn%s\c&H%s&}]]):format(
+        math.floor(options.scaling_factor_body * BASE_FONT_SIZE * 0.9),
+        options.font_name_body,
+        options.font_color_secondary
     )
 
     -- Cursor style
@@ -249,21 +326,17 @@ local function remove_overlay()
     end
 end
 
----Render cursor for given item position
----@param position number
+---Render cursor for given body item position
+---@param position number Position in body items
 local function render_cursor(position)
-    local style = renderer_state.display_items[position].style_variant or 'default'
-
-    if style ~= 'default' then
-        append_to_buffer('\\h\\h\\h')
-    elseif position == renderer_state.cursor_position then
-        if renderer_state.selection_state[position] then
+    if position == renderer_state.body.cursor_position then
+        if renderer_state.body.selection_state[position] then
             append_to_buffer(renderer_state.style.cursor, options.cursor_selected_icon, '\\h')
         else
             append_to_buffer(renderer_state.style.cursor, options.cursor_icon, '\\h')
         end
     else
-        if renderer_state.selection_state[position] then
+        if renderer_state.body.selection_state[position] then
             append_to_buffer(options.selected_icon, '\\h')
         else
             append_to_buffer(options.normal_icon, '\\h')
@@ -271,22 +344,47 @@ local function render_cursor(position)
     end
 end
 
----Render a single display item with enhanced styling support
+---Render a zone item (header or footer)
 ---@param item Item
----@param position number
-local function render_item(item, position)
+---@param zone_style string ASS style string for the zone
+local function render_zone_item(item, zone_style)
+    -- Apply zone style
+    append_to_buffer(zone_style)
+
+    -- Apply item-specific styling if present
+    if item.style_variant then
+        if item.style_variant == 'accent' then
+            append_to_buffer(renderer_state.style.accent)
+        elseif item.style_variant == 'secondary' or item.style_variant == 'muted' then
+            append_to_buffer(renderer_state.style.secondary)
+        end
+    end
+
+    -- Render text with proper ASS escaping
+    local display_text = item.primary_text or ''
+    local escaped_text = hh_utils.ass_escape(display_text, renderer_state.style.warning .. '…' .. zone_style)
+    append_to_buffer(escaped_text)
+
+    -- Add newline
+    append_newline()
+end
+
+---Render a single body item with enhanced styling support
+---@param item Item
+---@param position number Position in body items
+local function render_body_item(item, position)
     -- Apply base body style
     append_to_buffer(renderer_state.style.body)
 
-    -- Render cursor (left alignment assumed for Phase 1)
+    -- Render cursor
     render_cursor(position)
 
     -- Apply item-specific styling
     local item_style = ''
     local multiselect_count = 0
-    for _ in pairs(renderer_state.selection_state) do multiselect_count = multiselect_count + 1 end
+    for _ in pairs(renderer_state.body.selection_state) do multiselect_count = multiselect_count + 1 end
 
-    if renderer_state.selection_state[position] then
+    if renderer_state.body.selection_state[position] then
         if multiselect_count > 1 then
             item_style = renderer_state.style.multiselect
         else
@@ -306,11 +404,61 @@ local function render_item(item, position)
 
     -- Render primary text with proper ASS escaping
     local display_text = item.primary_text or 'Untitled'
-    local escaped_text = hh_utils.ass_escape(display_text, renderer_state.style.warning .. '⊠' .. item_style)
+    local escaped_text = hh_utils.ass_escape(display_text, renderer_state.style.warning .. '…' .. item_style)
     append_to_buffer(escaped_text, '\\h')
 
     -- Add newline for next item
     append_newline()
+end
+
+---Render the header zone
+local function render_header()
+    if #renderer_state.header.items == 0 then
+        return
+    end
+
+    for _, item in ipairs(renderer_state.header.items) do
+        render_zone_item(item, renderer_state.style.header)
+    end
+
+    -- Add spacing for spacious layout
+    if renderer_state.header.style == 'spacious' then
+        append_newline()
+    end
+end
+
+---Render the body zone
+---@param view_start number
+---@param view_end number
+local function render_body(view_start, view_end)
+    if #renderer_state.body.items == 0 then
+        -- Show empty text
+        append_to_buffer(renderer_state.style.body, hh_utils.ass_escape(renderer_state.body.empty_text))
+        append_newline()
+        return
+    end
+
+    -- Render visible body items
+    for i = view_start, view_end do
+        local item = renderer_state.body.items[i]
+        render_body_item(item, i)
+    end
+end
+
+---Render the footer zone
+local function render_footer()
+    if #renderer_state.footer.items == 0 then
+        return
+    end
+
+    -- Add spacing for spacious layout
+    if renderer_state.footer.style == 'spacious' then
+        append_newline()
+    end
+
+    for _, item in ipairs(renderer_state.footer.items) do
+        render_zone_item(item, renderer_state.style.footer)
+    end
 end
 
 ---Generate ASS content and update overlay with enhanced error handling
@@ -330,31 +478,17 @@ local function generate_and_display_ass()
     -- Add global alignment style
     append_to_buffer(renderer_state.style.global)
 
-    -- Handle empty content
-    if #renderer_state.display_items == 0 then
-        append_to_buffer(renderer_state.style.body, hh_utils.ass_escape(renderer_state.empty_text))
-        flush_buffer()
-        draw_overlay()
+    -- Render header zone
+    render_header()
 
-        -- Emit status event
-        events.emit('text_renderer.updated', {
-            visible_items = 0,
-            cursor_pos = 0,
-            view_start = 0,
-            view_end = 0,
-            has_overflow = false
-        })
-        return
-    end
-
-    -- Calculate viewport with enhanced algorithm
+    -- Calculate viewport for body
     local view_start, view_end, has_overflow = calculate_view_window()
 
-    -- Render visible items
-    for i = view_start, view_end do
-        local item = renderer_state.display_items[i]
-        render_item(item, i)
-    end
+    -- Render body zone
+    render_body(view_start, view_end)
+
+    -- Render footer zone
+    render_footer()
 
     -- Flush buffer and draw
     flush_buffer()
@@ -363,14 +497,16 @@ local function generate_and_display_ass()
     -- Emit completion status with enhanced information
     events.emit('text_renderer.updated', {
         visible_items = view_end - view_start + 1,
-        cursor_pos = renderer_state.cursor_position,
+        cursor_pos = renderer_state.body.cursor_position,
         view_start = view_start,
         view_end = view_end,
         has_overflow = has_overflow,
         geometry = {
-            max_items = renderer_state.geometry.max_items,
+            body_height = renderer_state.geometry.body_height,
+            header_height = renderer_state.geometry.header_height,
+            footer_height = renderer_state.geometry.footer_height,
             line_height = renderer_state.geometry.line_height,
-            screen_height = renderer_state.geometry.screen_height
+            virtual_height = renderer_state.geometry.virtual_height,
         }
     })
 
@@ -378,7 +514,12 @@ local function generate_and_display_ass()
     renderer_state.needs_update = false
 
     events.emit('msg.debug.text_renderer', {
-        msg = {'Rendered', view_end - view_start + 1, 'of', #renderer_state.display_items, 'items'}
+        msg = {
+            'Rendered:',
+            'header=' .. #renderer_state.header.items,
+            'body=' .. (view_end - view_start + 1) .. '/' .. #renderer_state.body.items,
+            'footer=' .. #renderer_state.footer.items
+        }
     })
 end
 
@@ -386,7 +527,7 @@ end
 ---@param width number
 ---@param height number
 local function handle_screen_resize(width, height)
-    local old_max_items = renderer_state.geometry.max_items
+    local old_body_height = renderer_state.geometry.body_height
 
     -- Update screen dimensions
     renderer_state.geometry.screen_width = width
@@ -396,22 +537,23 @@ local function handle_screen_resize(width, height)
     compute_text_geometry()
 
     -- Check if viewport capacity changed
-    if old_max_items ~= renderer_state.geometry.max_items then
+    if old_body_height ~= renderer_state.geometry.body_height then
         renderer_state.needs_update = true
 
         events.emit('msg.info.text_renderer', {
             msg = {
                 'Geometry changed:',
-                old_max_items .. ' -> ' .. renderer_state.geometry.max_items .. ' max items'
+                old_body_height .. ' -> ' .. renderer_state.geometry.body_height .. ' body items'
             }
         })
 
         -- Emit viewport changed event
         events.emit('text_renderer.viewport_changed', {
-            max_visible_items = renderer_state.geometry.max_items,
-            viewport_height = renderer_state.geometry.available_height,
+            max_visible_items = renderer_state.geometry.body_height,
+            header_height = renderer_state.geometry.header_height,
+            footer_height = renderer_state.geometry.footer_height,
             line_height = renderer_state.geometry.line_height,
-            old_max_items = old_max_items
+            old_max_items = old_body_height
         })
     end
 end
@@ -420,7 +562,7 @@ end
 ---@type HandlerTable
 local handlers = {
 
-    ---Main render request handler with enhanced validation
+    ---Main render request handler with zone support and backward compatibility
     ---@param _ EventName
     ---@param data TextRendererRenderData|EventData|nil
     ['text_renderer.render'] = function(_, data)
@@ -431,23 +573,68 @@ local handlers = {
             return
         end
 
-        -- Update content if provided
-        if data.items then
+        local needs_geometry_update = false
+
+        -- Handle zoned layout mode (new API)
+        if data.header or data.body or data.footer then
+            -- Update header zone
+            if data.header then
+                if type(data.header.items) ~= 'table' then
+                    events.emit('msg.error.text_renderer', {
+                        msg = 'Header items must be a table/array'
+                    })
+                    return
+                end
+                renderer_state.header.items = data.header.items
+                renderer_state.header.style = data.header.style or 'compact'
+                needs_geometry_update = true
+            end
+
+            -- Update body zone
+            if data.body then
+                if type(data.body.items) ~= 'table' then
+                    events.emit('msg.error.text_renderer', {
+                        msg = 'Body items must be a table/array'
+                    })
+                    return
+                end
+                renderer_state.body.items = data.body.items
+                needs_geometry_update = true
+            end
+
+            -- Update footer zone
+            if data.footer then
+                if type(data.footer.items) ~= 'table' then
+                    events.emit('msg.error.text_renderer', {
+                        msg = 'Footer items must be a table/array'
+                    })
+                    return
+                end
+                renderer_state.footer.items = data.footer.items
+                renderer_state.footer.style = data.footer.style or 'compact'
+                needs_geometry_update = true
+            end
+
+        -- Handle simple mode (backward compatible)
+        elseif data.items then
             if type(data.items) ~= 'table' then
                 events.emit('msg.error.text_renderer', {
                     msg = 'Items must be a table/array'
                 })
                 return
             end
-            renderer_state.display_items = data.items
-            renderer_state.needs_update = true
+            -- Map simple mode to body zone
+            renderer_state.body.items = data.items
+            renderer_state.header.items = {}
+            renderer_state.footer.items = {}
+            needs_geometry_update = true
         end
 
         -- Update cursor position if provided with validation
         if data.cursor_pos and type(data.cursor_pos) == 'number' then
-            local new_pos = math.max(1, math.min(data.cursor_pos, math.max(1, #renderer_state.display_items)))
-            if new_pos ~= renderer_state.cursor_position then
-                renderer_state.cursor_position = new_pos
+            local new_pos = math.max(1, math.min(data.cursor_pos, math.max(1, #renderer_state.body.items)))
+            if new_pos ~= renderer_state.body.cursor_position then
+                renderer_state.body.cursor_position = new_pos
                 renderer_state.needs_update = true
             end
         end
@@ -455,13 +642,19 @@ local handlers = {
         -- Update selection state if provided
         if data.selection then
             if type(data.selection) == 'table' then
-                renderer_state.selection_state = data.selection
+                renderer_state.body.selection_state = data.selection
                 renderer_state.needs_update = true
             else
                 events.emit('msg.warn.text_renderer', {
                     msg = 'Selection state must be a table'
                 })
             end
+        end
+
+        -- Recalculate geometry if zones changed
+        if needs_geometry_update then
+            compute_text_geometry()
+            renderer_state.needs_update = true
         end
 
         -- Force update if requested
@@ -501,9 +694,11 @@ local handlers = {
 
     ---Clear content and hide
     ['text_renderer.clear'] = function(_, _)
-        renderer_state.display_items = {}
-        renderer_state.cursor_position = 1
-        renderer_state.selection_state = {}
+        renderer_state.header.items = {}
+        renderer_state.body.items = {}
+        renderer_state.footer.items = {}
+        renderer_state.body.cursor_position = 1
+        renderer_state.body.selection_state = {}
         renderer_state.active = false
         if renderer_state.overlay then
             remove_overlay()
@@ -534,7 +729,9 @@ local handlers = {
         events.emit('text_renderer.geometry_info', {
             geometry = renderer_state.geometry,
             view_window = renderer_state.view_window,
-            item_count = #renderer_state.display_items,
+            body_item_count = #renderer_state.body.items,
+            header_item_count = #renderer_state.header.items,
+            footer_item_count = #renderer_state.footer.items,
             active = renderer_state.active
         })
     end,
@@ -549,7 +746,7 @@ end
 
 ---Initialize text renderer with enhanced setup
 function text_renderer.init()
-    events.emit('msg.debug.text_renderer', { msg = 'Initializing enhanced text renderer...' })
+    events.emit('msg.debug.text_renderer', { msg = 'Initializing enhanced text renderer with layout zones...' })
 
     -- Initialize geometry from current screen size
     local screen_width = mp.get_property_number('osd-width') or 1920
@@ -557,14 +754,14 @@ function text_renderer.init()
     renderer_state.geometry.screen_width = screen_width
     renderer_state.geometry.screen_height = screen_height
 
-    -- Compute initial geometry
+    -- Initialize overlay system FIRST (needed for virtual resolution in geometry calculations)
+    initialize_overlay()
+
+    -- Compute initial geometry (now that overlay exists)
     compute_text_geometry()
 
     -- Initialize styles
     initialize_styles()
-
-    -- Initialize overlay system
-    initialize_overlay()
 
     -- Register event handlers
     for event in pairs(handlers) do
@@ -589,8 +786,8 @@ function text_renderer.init()
 
     events.emit('msg.info.text_renderer', {
         msg = {
-            'Enhanced text renderer initialized',
-            'Max items: ' .. renderer_state.geometry.max_items,
+            'Enhanced text renderer with zones initialized',
+            'Body capacity: ' .. renderer_state.geometry.body_height .. ' items',
             'Screen: ' .. screen_width .. 'x' .. screen_height
         }
     })
@@ -607,7 +804,9 @@ function text_renderer.cleanup()
     -- Reset state
     renderer_state.active = false
     renderer_state.initialized = false
-    renderer_state.display_items = {}
+    renderer_state.header.items = {}
+    renderer_state.body.items = {}
+    renderer_state.footer.items = {}
     renderer_state.string_buffer = {}
     renderer_state.geometry.ok = false
 

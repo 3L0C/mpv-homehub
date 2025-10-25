@@ -96,34 +96,45 @@ local function filter_items(items, query)
     return filtered, indices
 end
 
----Render the current search results.
+---Render the current search results using zoned layout.
 local function render_search_results()
     if not search_state.visible then return end
 
     local show_count = options.search and options.search.show_match_count
     show_count = show_count == nil and true or show_count
 
-    -- Build status message
-    local status_items = {}
     if show_count and #search_state.filtered_items > 0 then
-        table.insert(status_items, {
-            primary_text = string.format('Search Results: %d / %d matches',
-                search_state.current_position,
-                #search_state.filtered_items),
-            style_variant = 'accent',
+        events.emit('text_renderer.render', {
+            header = {
+                items = {
+                    {
+                        primary_text = string.format('Search Results: %d / %d matches',
+                            search_state.current_position,
+                            #search_state.filtered_items),
+                        style_variant = 'accent',
+                    },
+                    {
+                        primary_text = '────────────────────────────────',
+                        style_variant = 'secondary',
+                    },
+                },
+                style = 'compact',  -- or 'spacious' for extra spacing
+            },
+            body = {
+                items = search_state.filtered_items,
+            },
+            cursor_pos = search_state.current_position,
         })
-        table.insert(status_items, {
-            primary_text = '────────────────────────────────',
-            style_variant = 'secondary',
+    else
+        -- No header, just body
+        events.emit('text_renderer.render', {
+            body = {
+                items = search_state.filtered_items,
+            },
+            cursor_pos = search_state.current_position,
         })
     end
 
-    events.emit('text_renderer.render', {
-        items = #status_items > 0
-            and hh_utils.table_concat(status_items, search_state.filtered_items)
-            or search_state.filtered_items,
-        cursor_pos = show_count and search_state.current_position + #status_items or search_state.current_position,
-    })
 end
 
 ---Bind keys for navigating search results.
