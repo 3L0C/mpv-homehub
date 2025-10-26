@@ -62,6 +62,27 @@ function hh_utils.validate_data(event_name, data, validator, controller)
     return true
 end
 
+---Is `data` an AdapterRequestData object
+---@param data AdapterRequestData|EventData
+---@return boolean
+function hh_utils.is_adapter_request(data)
+    return type(data) == 'table'
+        and type(data.ctx_id) == 'string'
+        and type(data.nav_id) == 'string'
+        and type(data.adapter_id) == 'string'
+end
+
+---Is `data` an AdapterNavToData object
+---@param data AdapterNavToData|EventData
+---@return boolean
+function hh_utils.is_adapter_nav_to(data)
+    return type(data) == 'table'
+        and type(data.ctx_id) == 'string'
+        and type(data.nav_id) == 'string'
+        and type(data.adapter_id) == 'string'
+        and type(data.selection) == 'number'
+end
+
 ---Is `map` a valid event map.
 ---@param map? AdapterEventMap
 ---@return boolean

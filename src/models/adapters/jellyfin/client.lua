@@ -33,26 +33,65 @@ local options = require 'src.core.options'
 ---@field client_name string
 ---@field client_version string
 ---@field playback_state PlaybackState
+---@field view_limit number
+---@field views JellyfinViews
 local JellyfinClient = {}
 JellyfinClient.__index = JellyfinClient
 
+-- Virtual folders are synthetic entries that appear in the root view
+-- but fetch their contents from special Jellyfin API endpoints.
+-- They use IDs prefixed/suffixed with colons to avoid conflicts.
+---@alias VirtualID string
+---@type table<string, VirtualID>
+local VIRTUAL_IDS = {
+    CONTINUE_WATCHING = ':VirtualContinueWatching:',
+    NEXT_UP = ':VirtualNextUp:',
+    LATEST = ':VirtualLatest:',
+}
+
+---@type table<string, JellyfinItem>
+local VIRTUAL_ITEMS = {
+    CONTINUE_WATCHING = {
+        Id = VIRTUAL_IDS.CONTINUE_WATCHING,
+        Name = 'Continue Watching',
+        Type = 'Folder',
+        IsVirtualFolder = true,
+        VirtualType = 'continue_watching',
+    },
+    NEXT_UP = {
+        Id = VIRTUAL_IDS.NEXT_UP,
+        Name = 'Next Up',
+        Type = 'Folder',
+        IsVirtualFolder = true,
+        VirtualType = 'next_up',
+    },
+    LATEST = {
+        Id = VIRTUAL_IDS.LATEST,
+        Name = 'Latest',
+        Type = 'Folder',
+        IsVirtualFolder = true,
+        VirtualType = 'latest',
+    },
+}
+
 ---Create a new Jellyfin client
----@param base_url string Base URL of Jellyfin server (e.g., "https://jellyfin.example.com")
----@param event_map AdapterEventMap Adapter events
----@param auto_play_next? boolean Whether to automatically play next episode (default: true)
+---@param config JellyfinConfig
+---@param api AdapterAPI
 ---@return JellyfinClient
-function JellyfinClient.new(base_url, event_map, adapter_id, auto_play_next)
+function JellyfinClient.new(config, api)
     local self = setmetatable({}, JellyfinClient)
 
-    self.base_url = base_url
+    self.base_url = config.url
     self.user_id = nil
     self.access_token = nil
     self.timer = nil
-    self.adapter_id = adapter_id
-    self.events = event_map
+    self.adapter_id = api.adapter_id
+    self.events = api.events
     self.keys_are_bound = false
     self.playback_handlers_configured = false
     self.keybind_handlers_configured = false
+    self.view_limit = config.view_limit or 25
+    self.views = config.views or {}
 
     -- Device info for authentication
     self.device_id = 'mpv-homehub-1'
@@ -64,7 +103,7 @@ function JellyfinClient.new(base_url, event_map, adapter_id, auto_play_next)
         is_playing = false,
         current_item = nil,
         play_session_id = nil,
-        auto_play_next = auto_play_next ~= false,
+        auto_play_next = config.auto_play_next ~= false,
         manual_stop = false,
         position_ticks = 0,
     }
@@ -144,30 +183,147 @@ function JellyfinClient:get_server_info()
 end
 
 ---Get user's media libraries/views
----@return JellyfinItem? items Array of library items, or nil on error
+---@return JellyfinItem[]? items Array of library items, or nil on error
 ---@return string? error Error message if request failed
 function JellyfinClient:get_views()
     if not self.user_id then
         return nil, 'not authenticated'
     end
 
-    local response, err = self:request('GET', '/Users/' .. self.user_id .. '/Views')
+    ---@type JellyfinItem[]
+    local items = {}
+    local views = self.views
 
-    if not response or err then
+    if views.libraries ~= false then
+        local response, err = self:request('GET', '/Users/' .. self.user_id .. '/Views')
+
+        if not response or err then
+            return nil, err
+        end
+
+        items = response.Items
+    end
+
+    if views.continue_watching ~= false then
+        table.insert(items, VIRTUAL_ITEMS.CONTINUE_WATCHING)
+    end
+
+    if views.next_up ~= false then
+        table.insert(items, VIRTUAL_ITEMS.NEXT_UP)
+    end
+
+    if views.latest ~= false then
+        table.insert(items, VIRTUAL_ITEMS.LATEST)
+    end
+
+    return items, nil
+end
+
+---Get continue watching items
+---@return JellyfinItem[]? items
+---@return string? error
+function JellyfinClient:get_continue_watching_items()
+    if not self.user_id then
+        return nil, 'not authenticated'
+    end
+
+    local response, err = self:request('GET', '/Users/' .. self.user_id .. '/Items/Resume')
+
+    if err then
         return nil, err
     end
 
-    return response.Items, nil
+    return response and response.Items or {}, nil
+end
+
+---Get next up episodes
+---@return JellyfinItem[]? items
+---@return string? error
+function JellyfinClient:get_next_up_items()
+    if not self.user_id then
+        return nil, 'not authenticated'
+    end
+
+    local query_string = http.build_query({
+        userId = self.user_id,
+        limit = self.view_limit,
+    })
+    local response, err = self:request('GET', '/Shows/NextUp?' .. query_string)
+
+    if err then
+        return nil, err
+    end
+
+    return response and response.Items or {}, nil
+end
+
+---Get recently added items
+---@return JellyfinItem[]? items
+---@return string? error
+function JellyfinClient:get_latest_items()
+    if not self.user_id then
+        return nil, 'not authenticated'
+    end
+
+    local query_string = http.build_query({
+        limit = self.view_limit,
+    })
+    local path = '/Users/' .. self.user_id .. '/Items/Latest?' .. query_string
+    local response, err = self:request('GET', path)
+
+    if err then
+        return nil, err
+    end
+
+    -- Latest endpoint returns items directly, not wrapped
+    return response or {}, nil
+end
+
+---Get items from a virtual folder
+---@param virtual_id VirtualID
+---@return JellyfinItem[]? items Array of items, or nil on error
+---@return string? error Error message if request failed
+function JellyfinClient:get_virtual_items(virtual_id)
+    if not self.user_id then
+        return nil, 'not authenticated'
+    end
+
+    if not virtual_id then
+        return nil, 'virtual_id is nil'
+    end
+
+    if virtual_id == VIRTUAL_IDS.CONTINUE_WATCHING then
+        return self:get_continue_watching_items()
+    elseif virtual_id == VIRTUAL_IDS.NEXT_UP then
+        return self:get_next_up_items()
+    elseif virtual_id == VIRTUAL_IDS.LATEST then
+        return self:get_latest_items()
+    else
+        return nil, 'Unrecognized virtual id: ' .. virtual_id
+    end
+end
+
+---Test if `id` is a virtual id
+---@param id string
+---@return boolean success True if `id` is a virtual id
+local function is_virtual_id(id)
+    return VIRTUAL_IDS.CONTINUE_WATCHING == id
+        or VIRTUAL_IDS.NEXT_UP == id
+        or VIRTUAL_IDS.LATEST == id
 end
 
 ---Get items in a library or folder
 ---@param parent_id? string Parent item ID (nil for root libraries)
 ---@param params? table Additional query parameters (sortBy, sortOrder, etc.)
----@return table? items Array of items, or nil on error
+---@return JellyfinItem[]? items Array of items, or nil on error
 ---@return string? error Error message if request failed
 function JellyfinClient:get_items(parent_id, params)
     if not self.user_id then
         return nil, 'not authenticated'
+    end
+
+    if is_virtual_id(parent_id or '') then
+        return self:get_virtual_items(parent_id or '')
     end
 
     -- Build query parameters with sensible defaults
@@ -217,6 +373,14 @@ end
 function JellyfinClient:get_item(item_id)
     if not self.user_id then
         return nil, 'not authenticated'
+    end
+
+    if is_virtual_id(item_id) then
+        for _, item in pairs(VIRTUAL_ITEMS) do
+            if item.Id == item_id then
+                return item
+            end
+        end
     end
 
     local path = '/Items/' .. item_id .. '?' .. http.build_query({ userId = self.user_id })

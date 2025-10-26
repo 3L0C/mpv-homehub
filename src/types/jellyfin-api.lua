@@ -30,7 +30,19 @@
 ---@field IndexNumber integer? Episode number
 ---@field ParentIndexNumber integer? Season number
 ---@field UserData JellyfinUserData? User data object
+---@field VirtualType 'continue_watching'|'next_up'|'latest'|nil
+---@field IsVirtualFolder boolean? Whether this is a virtual folder/collection
 ---
 ---@class JellyfinSyncData
 ---@field item_id string
 ---@field state 'playing'
+---
+---@class JellyfinViews
+---@field libraries boolean?
+---@field continue_watching boolean?
+---@field next_up boolean?
+---@field latest boolean?
+---
+---@class JellyfinConfig: AdapterConfig
+---@field views JellyfinViews?
+---@field view_limit number?
