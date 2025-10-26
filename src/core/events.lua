@@ -151,7 +151,7 @@ function events.emit(event_name, data)
     if direct_listeners then
         for _, listener in ipairs(direct_listeners) do
             listeners_called = listeners_called + 1
-            local success, err = pcall(listener.callback, event_name, data)
+            local success, err = pcall(listener.callback, event_name, data or {})
             if not success then
                 logger.log('msg.error.events', { msg = {
                     'Error in listener for', event_name,

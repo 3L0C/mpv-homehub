@@ -3,7 +3,7 @@
 ---Represents a layout zone (header, body, or footer) in the text renderer.
 ---@class TextRendererZone
 ---@field items Item[] Array of items to display in this zone
----@field style? 'compact'|'spacious' Layout density hint (default: 'compact')
+---@field style 'compact'|'spacious'|nil Layout density hint (default: 'compact')
 ---
 ---Represents the data sent to the `text_renderer.render` event.
 ---This is the primary interface for requesting text rendering updates.
@@ -15,15 +15,15 @@
 ---@class TextRendererRenderData
 ---
 --- Simple mode (backward compatible)
----@field items? Item[] Array of display items to render (maps to body.items)
----@field cursor_pos? number Visual cursor position in body
----@field selection? Set<number> Selection state mapping for body items
+---@field items Item[]? Array of display items to render (maps to body.items)
+---@field cursor_pos number? Visual cursor position in body
+---@field selection Set<number>? Selection state mapping for body items
 ---
 --- Zoned layout mode (new)
----@field header? TextRendererZone Optional fixed header zone (non-navigable)
----@field body? TextRendererZone Main content zone (navigable)
----@field footer? TextRendererZone Optional fixed footer zone (non-navigable)
+---@field header TextRendererZone? Optional fixed header zone (non-navigable)
+---@field body TextRendererZone? Main content zone (navigable)
+---@field footer TextRendererZone? Optional fixed footer zone (non-navigable)
 ---
 --- Common options
----@field force_update? boolean Force refresh even if no changes detected
----@field force_show? boolean Force show renderer in case it might be hidden
+---@field force_update boolean? Force refresh even if no changes detected
+---@field force_show boolean? Force show renderer in case it might be hidden

@@ -15,7 +15,7 @@
 ---@field group InputGroup
 ---@field name string
 ---@field ctx InputCtx
----@field flags? InputFlags
+---@field flags InputFlags?
 ---
 ---@class InputData
 ---@field key InputKey

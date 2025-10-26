@@ -33,9 +33,9 @@
 ---Request to update the navigation state for the current context
 ---@class NavSetStateData
 ---@field ctx_id NavCtxID
----@field columns? number
----@field position? number
----@field total_items? number
+---@field columns number?
+---@field position number?
+---@field total_items number?
 ---
 -- ============================================================================
 -- Navigation Events (System → Listeners)

@@ -1,35 +1,35 @@
 ---@meta _
 ---
 ---@class JellyfinUserData
----@field IsFavorite? boolean
----@field ItemId? string
----@field Played? boolean
----@field Key? string
----@field LastPlayedDate? string
----@field PlayCount? number
----@field PlaybackPositionTicks? number
+---@field IsFavorite boolean?
+---@field ItemId string?
+---@field Played boolean?
+---@field Key string?
+---@field LastPlayedDate string?
+---@field PlayCount number?
+---@field PlaybackPositionTicks number?
 ---
 ---@class JellyfinItem
 ---@field Id string UUID of the item
----@field Name? string Display name
 ---@field Type string BaseItemKind enum (e.g., "Movie", "Series", "Folder", "Audio", "Video")
----@field IsFolder? boolean Whether this is a folder/collection
----@field OriginalTitle? string Original title if different from Name
----@field ParentId? string UUID of parent item
----@field ServerId? string Server identifier
----@field Etag? string Entity tag for caching
----@field DateCreated? string ISO datetime when created
----@field Overview? string Description/plot summary
----@field MediaType? string "Video"|"Audio"|"Photo"|"Book"|"Unknown"
----@field RunTimeTicks? integer Runtime in ticks (10000 ticks = 1ms)
----@field Path? string File path
----@field MediaSources? table[] Available media sources
----@field PrimaryImageAspectRatio? number Aspect ratio of primary image
----@field SeriesId? string UUID of parent series (for episodes)
----@field SeasonId? string UUID of parent season (for episodes)
----@field IndexNumber? integer Episode number
----@field ParentIndexNumber? integer Season number
----@field UserData? JellyfinUserData User data object
+---@field Name string? Display name
+---@field IsFolder boolean? Whether this is a folder/collection
+---@field OriginalTitle string? Original title if different from Name
+---@field ParentId string? UUID of parent item
+---@field ServerId string? Server identifier
+---@field Etag string? Entity tag for caching
+---@field DateCreated string? ISO datetime when created
+---@field Overview string? Description/plot summary
+---@field MediaType string? "Video"|"Audio"|"Photo"|"Book"|"Unknown"
+---@field RunTimeTicks integer? Runtime in ticks (10000 ticks = 1ms)
+---@field Path string? File path
+---@field MediaSources table[]? Available media sources
+---@field PrimaryImageAspectRatio number? Aspect ratio of primary image
+---@field SeriesId string? UUID of parent series (for episodes)
+---@field SeasonId string? UUID of parent season (for episodes)
+---@field IndexNumber integer? Episode number
+---@field ParentIndexNumber integer? Season number
+---@field UserData JellyfinUserData? User data object
 ---
 ---@class JellyfinSyncData
 ---@field item_id string

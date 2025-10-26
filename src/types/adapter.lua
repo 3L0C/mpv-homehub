@@ -12,13 +12,13 @@
 ---@field id string Unique identifier for this adapter instance
 ---@field display_name AdapterName Human-readable name for UI display
 ---@field type 'jellyfin'|'emby'|'plex'|'subsonic'|'other' Adapter type
----@field external? boolean Whether this adapter is external or not (default: false)
----@field enabled? boolean Whether this adapter should be loaded (default: true)
----@field url? string Base URL for the media server
----@field username? string Username for authentication
----@field password? string Password for authentication
----@field file_path? string Path to external adapter script (overrides default path)
----@field auto_play_next? boolean Whether adapter should play the next file in a series
+---@field external boolean? Whether this adapter is external or not (default: false)
+---@field enabled boolean? Whether this adapter should be loaded (default: true)
+---@field url string? Base URL for the media server
+---@field username string? Username for authentication
+---@field password string? Password for authentication
+---@field file_path string? Path to external adapter script (overrides default path)
+---@field auto_play_next boolean? Whether adapter should play the next file in a series
 ---
 ---@alias MediaType 'video'|'audio'|'other'
 ---
@@ -28,11 +28,11 @@
 ---@field navigate_to string
 ---@field next string
 ---@field prev string
----@field search? string
----@field action? string
----@field status? string
----@field error? string
----@field sync? string
+---@field search string?
+---@field action string?
+---@field status string?
+---@field error string?
+---@field sync string?
 ---
 ---Represents the capabilities supported by an Adapter.
 ---@class AdapterCapabilities
@@ -72,7 +72,7 @@
 ---Represents the data sent during an adapter error event.
 ---@class AdapterErrorData
 ---@field adapter_id AdapterID
----@field error? string
+---@field error string?
 ---
 ---Represents a sync request, typically sent from an adapters client.
 ---@class AdapterSyncData

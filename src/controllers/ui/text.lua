@@ -18,7 +18,7 @@ local ui_text = {}
 ---@field keybinds_active boolean
 ---@field keybinds_set boolean
 ---@field cursor_pos number
----@field current_header? TextRendererZone
+---@field current_header TextRendererZone?
 ---@field current_items Item[]
 ---@field breadcrumb string[]
 local text_state = {

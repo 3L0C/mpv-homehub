@@ -3,4 +3,4 @@
 ---Message data.
 ---@class MessengerData
 ---@field msg string|string[]
----@field separator? string 
+---@field separator string? 

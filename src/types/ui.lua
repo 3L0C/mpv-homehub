@@ -10,4 +10,4 @@
 ---@field overlay UiOverlay
 ---
 ---@class UiUpdateData
----@field cursor_pos? number
+---@field cursor_pos number?
