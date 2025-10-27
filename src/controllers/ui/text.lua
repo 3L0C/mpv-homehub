@@ -375,7 +375,11 @@ local handlers = {
     ['search.text.activate'] = function(_, _)
         if not text_state.active then return end
 
-        search_client:execute(text_state.current_items)
+        if search_client:execute(text_state.current_items) then
+            log.warn('ui_text', {
+                'Could not start search.'
+            })
+        end
     end,
 
     ---@param event_name EventName
@@ -406,6 +410,7 @@ local handlers = {
             return
         end
 
+        events.emit('ui.text.show')
         events.emit('nav.set_state', {
             ctx_id = text_state.id,
             position = data.selected_index,

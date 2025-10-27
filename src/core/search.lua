@@ -327,6 +327,7 @@ function SearchClient:_cycle_search_results()
             self:_navigate_results(-1)
         elseif action == 'select' then
             self:_complete_search()
+            break
         elseif action == 'cancel' then
             self:_cancel_search()
             break
@@ -363,10 +364,14 @@ function SearchClient:_search_coroutine(items)
         id = "homehub/search/" .. self._internal_id,
         default_text = "",
         submit = function(text)
-            hh_utils.coroutine.resume_err(co, true, text)  -- Submitted
+            if self._active_coroutine == co then
+                hh_utils.coroutine.resume_err(co, true, text)  -- Submitted
+            end
         end,
         closed = function(text)
-            hh_utils.coroutine.resume_err(co, false, text)  -- Cancelled
+            if self._active_coroutine == co then
+                hh_utils.coroutine.resume_err(co, false, text)  -- Cancelled
+            end
         end,
     })
 
