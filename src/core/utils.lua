@@ -437,7 +437,7 @@ function hh_utils.coroutine.callback(time_limit)
     local co = hh_utils.coroutine.assert("cannot create a coroutine callback for the main thread")
     local timer = time_limit and mp.add_timeout(time_limit, function()
         log.debug('coroutine', {
-             'Time limit on callback expired'
+            'Time limit on callback expired'
         })
         hh_utils.coroutine.resume_err(co, false)
     end)
@@ -449,6 +449,115 @@ function hh_utils.coroutine.callback(time_limit)
             return hh_utils.coroutine.resume_err(co, true, ...)
         end
         return hh_utils.coroutine.resume_err(co, ...)
+    end
+    return fn
+end
+
+---Creates a guarded callback that only resumes if a condition is met.
+---@param condition fun(): boolean Guard function that returns true to allow resume
+---@param time_limit? number Optional timeout in seconds
+---@return fun(...) callback Function that conditionally resumes the coroutine
+---
+---The condition function is called when the callback is invoked. If it returns false,
+---the coroutine is not resumed and the callback returns early.
+---
+---If time_limit is provided, the first return value is a boolean indicating whether
+---the callback was invoked before the timeout (true) or the timeout expired (false).
+function hh_utils.coroutine.guard_callback(condition, time_limit)
+    local co = hh_utils.coroutine.assert("cannot create a coroutine callback for the main thread")
+    local timer = time_limit and mp.add_timeout(time_limit, function()
+        log.debug('coroutine', {
+             'Time limit on callback expired'
+        })
+        hh_utils.coroutine.resume_err(co, false)
+    end)
+
+    local function fn(...)
+        if timer then
+            if not timer:is_enabled() then return
+            else timer:kill() end
+        end
+
+        -- Check guard condition
+        if not condition() then
+            return
+        end
+
+        if timer then
+            return hh_utils.coroutine.resume_err(co, true, ...)
+        end
+        return hh_utils.coroutine.resume_err(co, ...)
+    end
+    return fn
+end
+
+---Creates a callback that prepends data to the resume arguments.
+---@param data? any Data to prepend to resume arguments
+---@param time_limit? number Optional timeout in seconds
+---@return fun(...) callback Function that resumes the coroutine with prepended data
+---
+---If time_limit is provided, the first return value is a boolean indicating whether
+---the callback was invoked before the timeout (true) or the timeout expired (false),
+---followed by the data and any additional arguments passed to the callback.
+---
+---Without time_limit, returns: data, ...
+---With time_limit, returns: success (boolean), data, ...
+function hh_utils.coroutine.wrap_callback(data, time_limit)
+    local co = hh_utils.coroutine.assert("cannot create a coroutine callback for the main thread")
+    local timer = time_limit and mp.add_timeout(time_limit, function()
+        log.debug('coroutine', {
+             'Time limit on callback expired'
+        })
+        hh_utils.coroutine.resume_err(co, false, data)
+    end)
+
+    local function fn(...)
+        if timer then
+            if not timer:is_enabled() then return
+            else timer:kill() end
+            return hh_utils.coroutine.resume_err(co, true, data, ...)
+        end
+        return hh_utils.coroutine.resume_err(co, data, ...)
+    end
+    return fn
+end
+
+---Creates a guarded callback that prepends data and only resumes if a condition is met.
+---@param data? any Data to prepend to resume arguments
+---@param condition fun(): boolean Guard function that returns true to allow resume
+---@param time_limit? number Optional timeout in seconds
+---@return fun(...) callback Function that conditionally resumes with prepended data
+---
+---Combines the functionality of wrap_callback and guard_callback. The condition is
+---checked first; if it returns false, the coroutine is not resumed. If true, the
+---coroutine is resumed with data prepended to the arguments.
+---
+---Without time_limit, returns: data, ...
+---With time_limit, returns: success (boolean), data, ...
+function hh_utils.coroutine.guard_wrapped_callback(data, condition, time_limit)
+    local co = hh_utils.coroutine.assert("cannot create a coroutine callback for the main thread")
+    local timer = time_limit and mp.add_timeout(time_limit, function()
+        log.debug('coroutine', {
+             'Time limit on callback expired'
+        })
+        hh_utils.coroutine.resume_err(co, false, data)
+    end)
+
+    local function fn(...)
+        if timer then
+            if not timer:is_enabled() then return
+            else timer:kill() end
+        end
+
+        -- Check guard condition
+        if not condition() then
+            return
+        end
+
+        if timer then
+            return hh_utils.coroutine.resume_err(co, true, data, ...)
+        end
+        return hh_utils.coroutine.resume_err(co, data, ...)
     end
     return fn
 end

@@ -363,16 +363,12 @@ function SearchClient:_search_coroutine(items)
         prompt = "Search: ",
         id = "homehub/search/" .. self._internal_id,
         default_text = "",
-        submit = function(text)
-            if self._active_coroutine == co then
-                hh_utils.coroutine.resume_err(co, true, text)  -- Submitted
-            end
-        end,
-        closed = function(text)
-            if self._active_coroutine == co then
-                hh_utils.coroutine.resume_err(co, false, text)  -- Cancelled
-            end
-        end,
+        submit = hh_utils.coroutine.guard_wrapped_callback(true, function()
+            return self._active_coroutine == co
+        end),
+        closed = hh_utils.coroutine.guard_wrapped_callback(false, function()
+            return self._active_coroutine == co
+        end),
     })
 
     -- Wait for user input
