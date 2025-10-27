@@ -442,7 +442,7 @@ local handlers = {
         } --[[@as TextRendererRenderData]])
 
         mp.add_timeout(3, function()
-            render_cached_content()
+            events.emit('ui.text.show')
         end)
     end,
 
