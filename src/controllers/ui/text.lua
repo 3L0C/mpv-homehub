@@ -2,9 +2,12 @@
 --  Text UI controller.
 --]]
 
+local mp = require 'mp'
+
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
 local options = require 'src.core.options'
+local search = require 'src.core.search'
 
 ---@class ui_text: Controller
 local ui_text = {}
@@ -21,6 +24,8 @@ local ui_text = {}
 ---@field current_header TextRendererZone?
 ---@field current_items Item[]
 ---@field breadcrumb string[]
+---@field search_events SearchClientEventMap
+---@field search_results Item[]?
 local text_state = {
     id = 'text',
     active = false,
@@ -33,7 +38,17 @@ local text_state = {
     current_header = nil,
     current_items = {},
     breadcrumb = {},
+    search_events = {
+        results = 'search.text.results',
+        cancelled = 'search.text.cancelled',
+        completed = 'search.text.completed',
+        no_results = 'search.text.no_results',
+        position_changed = 'search.text.position_changed',
+    },
+    search_results = nil,
 }
+
+local search_client
 
 ---Set the keybind table to user defined keys or defaults
 local function set_keybind_table()
@@ -96,9 +111,8 @@ local function bind_keys()
     )
     hh_utils.bind_keys(
         text_state.keybinds.search,
-        'ui.push_overlay',
-        'ui_text.active',
-        { overlay = 'search' }
+        'search.text.activate',
+        'ui_text.active'
     )
     -- TODO: implement actual events for these keys
     -- hh_utils.bind_keys(text_state.keys.page_up, '', 'ui_text')
@@ -155,6 +169,75 @@ local function pop_crumb()
     return table.remove(text_state.breadcrumb)
 end
 
+---Render cached content
+---@param force_show boolean?
+local function render_cached_content(force_show)
+    events.emit('text_renderer.render', {
+        header = text_state.current_header,
+        body = {
+            items = text_state.current_items,
+        },
+        footer = {
+            items = {
+                {
+                    primary_text = '/ - Search, ? - Help',
+                },
+            },
+            style = 'spacious',
+        },
+        cursor_pos = text_state.cursor_pos,
+        force_show = force_show,
+    } --[[@as TextRendererRenderData]])
+end
+
+---Render search results
+---@param data SearchResultsData
+local function render_search_results(data)
+    if not search_client:is_active() then
+        events.emit('msg.warn.text', { msg = {
+            'Trying to render search results while client is inactive.'
+        } })
+        return
+    end
+
+    text_state.search_results = data.filtered_items
+
+    if options.search.show_match_count then
+        events.emit('text_renderer.render', {
+            header = {
+                items = {
+                    {
+                        primary_text = ('Search Results: %d / %d match%s'):format(
+                            data.current_position,
+                            data.total_matches,
+                            data.total_matches == 1 and '' or 'es'
+                        ),
+                        style_variant = 'accent',
+                    },
+                    {
+                        primary_text = hh_utils.separator,
+                        style_variant = 'secondary',
+                    },
+                },
+                style = 'compact',
+            },
+            body = {
+                items = text_state.search_results,
+            },
+            cursor_pos = data.current_position,
+            force_show = true,
+        } --[[@as TextRendererRenderData]])
+    else
+        events.emit('text_renderer.render', {
+            body = {
+                items = text_state.search_results,
+            },
+            cursor_pos = data.current_position,
+            force_show = true,
+        } --[[@as TextRendererRenderData]])
+    end
+end
+
 ---@type HandlerTable
 local handlers = {
 
@@ -186,22 +269,7 @@ local handlers = {
 
     ['ui.text.show'] = function(_, _)
         bind_keys()
-        events.emit('text_renderer.render', {
-            header = text_state.current_header,
-            body = {
-                items = text_state.current_items,
-            },
-            footer = {
-                items = {
-                    {
-                        primary_text = '/ - Search, ? - Help',
-                    },
-                },
-                style = 'spacious',
-            },
-            cursor_pos = text_state.cursor_pos,
-            force_show = true,
-        } --[[@as TextRendererRenderData]])
+        render_cached_content(true)
     end,
 
     ['ui.text.hide'] = function(_, _)
@@ -303,14 +371,104 @@ local handlers = {
     end,
 
     -- Search events
+
     ---Activate search on current items
-    ['search.activate.text'] = function(_, _)
+    ['search.text.activate'] = function(_, _)
         if not text_state.active then return end
 
-        events.emit('search.start', {
+        search_client:execute(text_state.current_items)
+    end,
+
+    ---@param event_name EventName
+    ---@param data SearchResultsData|EventData
+    [text_state.search_events.results] = function (event_name, data)
+        if not hh_utils.validate_data(event_name, data, hh_utils.is_search_results, 'text') then
+            return
+        end
+
+        events.emit('ui.text.hide')
+        render_search_results(data)
+    end,
+
+    ---@param event_name EventName
+    ---@param data SearchCancelledData|EventData
+    [text_state.search_events.cancelled] = function(event_name, data)
+        if not hh_utils.validate_data(event_name, data, hh_utils.is_search_cancelled, 'text') then
+            return
+        end
+
+        events.emit('ui.text.show')
+    end,
+
+    ---@param event_name EventName
+    ---@param data SearchCompletedData|EventData
+    [text_state.search_events.completed] = function(event_name, data)
+        if not hh_utils.validate_data(event_name, data, hh_utils.is_search_completed, 'text') then
+            return
+        end
+
+        events.emit('nav.set_state', {
             ctx_id = text_state.id,
-            position = text_state.cursor_pos,
-        } --[[@as SearchStartData]])
+            position = data.selected_index,
+        } --[[@as NavSetStateData]])
+        events.emit('nav.select')
+    end,
+
+    ---@param event_name EventName
+    ---@param data SearchNoResultsData|EventData
+    [text_state.search_events.no_results] = function(event_name, data)
+        if not hh_utils.validate_data(event_name, data, hh_utils.is_search_no_results, 'text') then
+            return
+        end
+
+        render_cached_content(true)
+        events.emit('text_renderer.render', {
+            header = {
+                items = {
+                    {
+                        primary_text = ('No results for query: "%s"'):format(data.query),
+                        style_variant = 'accent',
+                    },
+                    {
+                        primary_text = hh_utils.separator,
+                        style_variant = 'secondary',
+                    },
+                },
+            },
+        } --[[@as TextRendererRenderData]])
+
+        mp.add_timeout(3, function()
+            render_cached_content()
+        end)
+    end,
+
+    ---@param event_name EventName
+    ---@param data SearchPositionChangedData|EventData
+    [text_state.search_events.position_changed] = function(event_name, data)
+        if not hh_utils.validate_data(event_name, data, hh_utils.is_search_pos_changed, 'text') then
+            return
+        end
+
+        events.emit('text_renderer.render', {
+            header = {
+                items = {
+                    {
+                        primary_text = ('Search Results: %d / %d match%s'):format(
+                            data.position,
+                            data.total,
+                            data.total == 1 and '' or 'es'
+                        ),
+                        style_variant = 'accent',
+                    },
+                    {
+                        primary_text = hh_utils.separator,
+                        style_variant = 'secondary',
+                    },
+                },
+                style = 'compact',
+            },
+            cursor_pos = data.position,
+        } --[[@as TextRendererRenderData]])
     end,
 
     -- Content events
@@ -359,21 +517,7 @@ local handlers = {
             style = 'compact',
         }
 
-        events.emit('text_renderer.render', {
-            header = text_state.current_header,
-            body = {
-                items = text_state.current_items,
-            },
-            footer = {
-                items = {
-                    {
-                        primary_text = '/ - Search, ? - Help',
-                    },
-                },
-                style = 'spacious',
-            },
-            cursor_pos = text_state.cursor_pos,
-        } --[[@as TextRendererRenderData]])
+        render_cached_content()
     end,
 
     ---@param event_name EventName
@@ -442,6 +586,18 @@ local function on_prep()
     set_keybind_table()
     hh_utils.bind_keys(text_state.keybinds.toggle, 'ui.toggle', 'ui_text.global', {
         mode = text_state.id
+    })
+
+    search_client = search.new({
+        case_sensitive = options.search.case_sensitive,
+        search_fields = options.search.search_fields,
+        events = {
+            results = text_state.search_events.results,
+            cancelled = text_state.search_events.cancelled,
+            completed = text_state.search_events.completed,
+            no_results = text_state.search_events.no_results,
+            position_changed = text_state.search_events.position_changed,
+        }
     })
 
     events.emit('ui.register_mode', { mode = text_state.id } --[[@as UiModeData]])

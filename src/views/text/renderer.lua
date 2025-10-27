@@ -29,7 +29,7 @@ local renderer_state = {
     active = false,
     initialized = false,
 
-    -- Layout zones (new architecture)
+    -- Layout zones
     header = {
         items = {},             -- Header items (non-navigable)
         item_count = 0,         -- Computed height in lines

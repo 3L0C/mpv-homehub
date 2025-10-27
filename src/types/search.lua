@@ -4,21 +4,55 @@
 -- Search Types
 -- ============================================================================
 ---
----Search activation data
----@class SearchStartData
----@field ctx_id NavCtxID Context requesting search
----@field position number Current cursor position before search
+---Configuration for creating a new search client
+---@class SearchClientConfig
+---@field events SearchClientEventMap Event namespace map (required)
+---@field case_sensitive boolean? Whether search is case-sensitive (default: false)
+---@field search_fields string[]? Which Item fields to search (default: {'primary_text', 'secondary_text'})
+---@field keybinds SearchKeyTable? Keybind overrides (uses global defaults if not specified)
 ---
----Search configuration in options
----@class SearchConfig
----@field case_sensitive boolean Whether search is case-sensitive (default: false)
----@field search_fields string[] Which Item fields to search (default: {'primary_text', 'secondary_text'})
----@field show_match_count boolean Show "Result X/Y" messages (default: true)
----@field keybinds SearchKeybinds Keybind configuration
+---Event namespace map for search client
+---Client will emit events to these custom namespaces
+---@class SearchClientEventMap
+---@field results string Event emitted when search finds results
+---@field position_changed string Event emitted when position changes (next/prev)
+---@field completed string Event emitted when user selects a result
+---@field cancelled string Event emitted when search is cancelled
+---@field no_results string Event emitted when query finds no matches
 ---
----Search keybind configuration
----@class SearchKeybinds
----@field next_result string[] Keys to navigate to next result (default: {'n'})
----@field prev_result string[] Keys to navigate to previous result (default: {'N'})
----@field select_result string[] Keys to select current result (default: {'ENTER'})
----@field cancel string[] Keys to cancel search (default: {'ESC'})
+---Search results event data
+---@class SearchResultsData
+---@field query string Search query that was executed
+---@field filtered_items Item[] Items that matched the query
+---@field match_indices number[] Indices in original item list that matched
+---@field total_matches number Total number of matches found
+---@field current_position number Current position in filtered list (always 1 initially)
+---@field current_item Item Item at current position
+---@field current_original_index number Original index of current item
+---
+---Position changed event data
+---@class SearchPositionChangedData
+---@field position number Current position in filtered list (1-indexed)
+---@field total number Total number of filtered items
+---@field current_item Item Item at current position
+---@field current_original_index number Original index of current item
+---
+---Search completed event data
+---@class SearchCompletedData
+---@field query string Search query that was executed
+---@field selected_index number Original index of selected item
+---
+---Search cancelled event data
+---@class SearchCancelledData
+---@field query string? Search query that was cancelled (nil if cancelled during prompt)
+---
+---No results found event data
+---@class SearchNoResultsData
+---@field query string Search query that found no matches
+---
+---Current position information (returned by get_current)
+---@class SearchPosition
+---@field position number Current position in filtered list (1-indexed)
+---@field total number Total number of filtered items
+---@field current_item Item Item at current position
+---@field current_original_index number Original index of current item

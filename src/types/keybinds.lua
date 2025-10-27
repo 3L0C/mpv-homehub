@@ -22,7 +22,7 @@
 ---@field select string[]?
 ---@field multiselect string[]?
 ---@field page_up string[]?
----@field page_down string[] ?
+---@field page_down string[]?
 ---@field search string[]?
 ---@field help string[]?
 ---@field toggle string[]?
@@ -32,6 +32,10 @@
 ---
 ---Search keybind table
 ---@class SearchKeyTable
+---@field next_result string[]?
+---@field prev_result string[]?
+---@field select_result string[]?
+---@field cancel string[]?
 ---
 ---Global keybind table
 ---@class GlobalKeyTable

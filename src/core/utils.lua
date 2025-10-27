@@ -62,6 +62,64 @@ function hh_utils.validate_data(event_name, data, validator, controller)
     return true
 end
 
+--------------------
+-- Search validation
+--------------------
+
+---Is `data` SearchResultsData object
+---@param data SearchResultsData|EventData
+---@return boolean
+function hh_utils.is_search_results(data)
+    return type(data) == 'table'
+        and type(data.query) == 'string'
+        and type(data.filtered_items) == 'table'
+        and type(data.match_indices) == 'table'
+        and type(data.total_matches) == 'number'
+        and type(data.current_position) == 'number'
+        and type(data.current_item) == 'table'
+        and type(data.current_original_index) == 'number'
+end
+
+---Is `data` a SearchPositionChangedData object
+---@param data SearchPositionChangedData|EventData
+---@return boolean
+function hh_utils.is_search_pos_changed(data)
+    return type(data) == 'table'
+        and type(data.position) == 'number'
+        and type(data.total) == 'number'
+        and type(data.current_item) == 'table'
+        and type(data.current_original_index) == 'number'
+end
+
+---Is `data` a SearchCompletedData object
+---@param data SearchCompletedData|EventData
+---@return boolean
+function hh_utils.is_search_completed(data)
+    return type(data) == 'table'
+        and type(data.query) == 'string'
+        and type(data.selected_index) == 'number'
+end
+
+---Is `data` a SearchCancelledData object
+---@param data SearchCancelledData|EventData
+---@return boolean
+function hh_utils.is_search_cancelled(data)
+    return type(data) == 'table'
+        and type(data.query or '') == 'string'
+end
+
+---Is `data` a SearchNoResultsData object
+---@param data SearchNoResultsData|EventData
+---@return boolean
+function hh_utils.is_search_no_results(data)
+    return type(data) == 'table'
+        and type(data.query) == 'string'
+end
+
+---------------------
+-- Adapter validation
+---------------------
+
 ---Is `data` an AdapterRequestData object
 ---@param data AdapterRequestData|EventData
 ---@return boolean
@@ -114,6 +172,10 @@ function hh_utils.is_adapter_api(data)
         and hh_utils.is_adapter_capabilities(data.capabilities)
 end
 
+---------------------
+-- Content validation
+---------------------
+
 ---Is `data` received during `content.loaded` event.
 ---@param data? ContentLoadedData
 ---@return boolean
@@ -152,6 +214,10 @@ function hh_utils.decode_nav_id(nav_id)
         rest = rest or '',
     } --[[@as NavIDParts]]
 end
+
+------------------------
+-- Navigation validation
+------------------------
 
 ---Is `data` valid NavSelectedData type.
 ---@param data any

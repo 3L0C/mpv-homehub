@@ -158,4 +158,7 @@ function mp.set_property_number(name, value) end
 ---@return string? err
 function mp.set_property_native(name, value) end
 
+---@return number The current mpv internal time in seconds as a number
+function mp.get_time() end
+
 return mp
