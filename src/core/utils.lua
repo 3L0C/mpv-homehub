@@ -8,8 +8,6 @@ local utils = require 'mp.utils'
 local events = require 'src.core.events'
 local log = require 'src.core.log'
 
----@alias HandlerTable table<EventName,ListenerCB>
-
 ---@class hh_utils
 ---@field separator string
 local hh_utils = {
@@ -355,6 +353,8 @@ function hh_utils.bind_keys(keys, event_name, group_name, ctx, flags)
     return true
 end
 
+---@alias HandlerTable table<EventName,ListenerCB>
+---
 ---Handler template for various controllers.
 ---@param event_name EventName
 ---@param data EventData
@@ -362,20 +362,28 @@ end
 ---@param component ComponentName
 function hh_utils.handler_template(event_name, data, handlers, component)
     local fn = handlers[event_name]
+
     if type(fn) ~= 'function' then
         log.warn(component, {
             'Got unhandled event:', event_name
         })
     else
-        log.debug(component, {
-            ("Got event '%s' with data '%s'."):format(event_name, utils.to_string(data))
-        })
+        if log.log_level >= log.log_levels.trace then
+            log.trace(component, {
+                ("Got event '%s' with data: %s"):format(event_name, utils.to_string(data))
+            })
+        else
+            log.debug(component, {
+                'Handling event:', event_name
+            })
+        end
+
         local success, err = pcall(fn, event_name, data)
         if not success then
             log.error(component, err or 'unknown')
         else
             log.trace(component, {
-                ("Successfully handled event '%s'."):format(event_name)
+                'Successfully handled event:', event_name
             })
         end
     end

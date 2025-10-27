@@ -2,13 +2,45 @@
 --  Logging interface for HomeHub
 --]]
 
+local mp = require 'mp'
 local msg = require 'mp.msg'
 local utils = require 'mp.utils'
 
 ---@alias LogLevel 'debug'|'error'|'fatal'|'trace'|'info'|'warn'|'verbose'
 
+local log_levels = {
+    no = 0, fatal = 10, error = 20, warn = 30,
+    info = 40, status = 50, v = 60, debug = 70, trace = 80,
+}
+
+---Get the log level for HomeHub
+---@return number
+local function get_log_level()
+    local msg_level = mp.get_property('msg-level', '')
+    local level = log_levels.status
+
+    if msg_level == '' then
+        return level
+    end
+
+    msg_level = msg_level .. ','
+    for entry in msg_level:gmatch('(.-),') do
+        local module, value = entry:match('(.-)=(.*)')
+        if module == 'all' or module == 'homehub' then
+            level = log_levels[value] or level
+        end
+    end
+
+    return level
+end
+
 ---@class log
-local log = {}
+---@field log_level number
+---@field log_levels table<LogLevel, number>
+local log = {
+    log_level = get_log_level(),
+    log_levels = log_levels,
+}
 
 ---Format a log message with component prefix
 ---@param component string Component name (e.g., 'content', 'navigation', 'search')
