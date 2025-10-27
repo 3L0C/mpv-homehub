@@ -565,7 +565,7 @@ local handlers = {
     ['text_renderer.render'] = function(_, data)
         if not data then
             log.warn('text_renderer', {
-                 'Received render request with no data' 
+                'Received render request with no data'
             })
             return
         end
@@ -603,7 +603,7 @@ local handlers = {
             if data.footer then
                 if type(data.footer.items) ~= 'table' then
                     log.error('text_renderer', {
-                         'Footer items must be a table/array' 
+                        'Footer items must be a table/array'
                     })
                     return
                 end
@@ -616,7 +616,7 @@ local handlers = {
         elseif data.items then
             if type(data.items) ~= 'table' then
                 log.error('text_renderer', {
-                     'Items must be a table/array' 
+                    'Items must be a table/array'
                 })
                 return
             end
@@ -643,7 +643,7 @@ local handlers = {
                 renderer_state.needs_update = true
             else
                 log.warn('text_renderer', {
-                     'Selection state must be a table' 
+                    'Selection state must be a table'
                 })
             end
         end
@@ -678,7 +678,7 @@ local handlers = {
             generate_and_display_ass()
         end
         log.debug('text_renderer', {
-             'Renderer activated' 
+            'Renderer activated'
         })
     end,
 
@@ -689,7 +689,7 @@ local handlers = {
             remove_overlay()
         end
         log.debug('text_renderer', {
-             'Renderer hidden' 
+            'Renderer hidden'
         })
     end,
 
@@ -705,7 +705,7 @@ local handlers = {
             remove_overlay()
         end
         log.debug('text_renderer', {
-             'Renderer cleared' 
+            'Renderer cleared'
         })
     end,
 
@@ -722,7 +722,7 @@ local handlers = {
             end
         else
             log.warn('text_renderer', {
-                 'Resize event missing screen dimensions' 
+                'Resize event missing screen dimensions'
             })
         end
     end,
@@ -750,7 +750,7 @@ end
 ---Initialize text renderer with enhanced setup
 function text_renderer.init()
     log.debug('text_renderer', {
-         'Initializing enhanced text renderer with layout zones...' 
+        'Initializing enhanced text renderer with layout zones...'
     })
 
     -- Initialize geometry from current screen size

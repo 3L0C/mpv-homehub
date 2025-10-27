@@ -4,7 +4,6 @@
 
 local opt = require 'mp.options'
 
-local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
 local log = require 'src.core.log'
 
