@@ -2,7 +2,7 @@
 --  Event system and observers
 --]]
 
-local logger = require 'src.core.logger'
+local log = require 'src.core.log'
 
 ---@type EventState
 local state = {
@@ -20,9 +20,7 @@ function events.init()
     state.wildcards = {}
     state.components = {}
 
-    logger.log('msg.debug.events', {
-        msg = 'Event system initialized'
-    })
+    log.debug('events', 'Event system initialized')
 end
 
 ---Register a component for lifecycle tracking
@@ -31,9 +29,7 @@ function events.register_component(component_name)
     if not state.components[component_name] then
         ---@type TrackedListener[]
         state.components[component_name] = {}
-        logger.log('msg.trace.events', {
-            msg = {'Registered component:', component_name},
-        })
+        log.trace('events', {'Registered component:', component_name})
     end
 end
 
@@ -90,9 +86,7 @@ function events.on(event_name, callback, component_name)
         })
     end
 
-    logger.log('msg.trace.events', {
-        msg = {'Added listener for', event_name, 'from component', component_name},
-    })
+    log.trace('events', {'Added listener for', event_name, 'from component', component_name})
 end
 
 ---Remove event listener(s)
@@ -104,9 +98,7 @@ function events.off(event_name, callback, component_name)
     if not callback and not component_name then
         -- Remove all listeners for this event
         state.listeners[event_name] = nil
-        logger.log('msg.trace.events', {
-            msg = {'Removed all listeners for', event_name},
-        })
+        log.trace('events', {'Removed all listeners for', event_name})
         return
     end
 
@@ -128,9 +120,7 @@ function events.off(event_name, callback, component_name)
 
         if should_remove then
             table.remove(listeners_list, i)
-            logger.log('msg.trace.events', {
-                msg = {'Removed listener for', event_name, 'from component', listener.component},
-            })
+            log.trace('events', {'Removed listener for', event_name, 'from component', listener.component})
         end
     end
 end
@@ -140,9 +130,7 @@ end
 ---@param data? EventData
 ---@return number Listeners called.
 function events.emit(event_name, data)
-    logger.log('msg.trace.events', { msg = {
-        'Emitting event:', event_name, 'with data:', data and 'present' or 'none'
-    } })
+    log.trace('events', {'Emitting event:', event_name, 'with data:', data and 'present' or 'none'})
 
     local listeners_called = 0
 
@@ -153,10 +141,10 @@ function events.emit(event_name, data)
             listeners_called = listeners_called + 1
             local success, err = pcall(listener.callback, event_name, data or {})
             if not success then
-                logger.log('msg.error.events', { msg = {
+                log.error('events', {
                     'Error in listener for', event_name,
                     'from component', listener.component, ':', err
-                } })
+                })
             end
         end
     end
@@ -168,18 +156,18 @@ function events.emit(event_name, data)
                 listeners_called = listeners_called + 1
                 local success, err = pcall(listener.callback, event_name, data)
                 if not success then
-                    logger.log('msg.error.events', { msg = {
+                    log.error('events', {
                         'Error in wildcard listener for', namespace,
                         'from component', listener.component, ':', err
-                    } })
+                    })
                 end
             end
         end
     end
 
-    logger.log('msg.trace.events', { msg = {
+    log.trace('events', {
         'Called', tostring(listeners_called), 'listeners for', event_name
-    } })
+    })
 
     return listeners_called
 end
@@ -190,9 +178,9 @@ end
 function events.cleanup_component(component_name)
     local component_listeners = state.components[component_name]
     if not component_listeners then
-        logger.log('msg.verbose.events', { msg = {
+        log.verbose('events', {
             'No listeners found for component', component_name
-        } })
+        })
         return
     end
 
@@ -230,9 +218,9 @@ function events.cleanup_component(component_name)
     -- Clear component tracking
     state.components[component_name] = nil
 
-    logger.log('msg.trace.events', { msg = {
+    log.trace('events', {
         'Cleaned up', tostring(removed_count), 'listeners for component', component_name
-    } })
+    })
 end
 
 ---Utility function to check if anyone is listening to an event

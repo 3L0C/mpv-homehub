@@ -9,6 +9,7 @@ local mp       = require 'mp'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 local options  = require 'src.core.options'
 
 ---@class text_renderer: View
@@ -162,7 +163,7 @@ local function compute_text_geometry()
 
     g.ok = true
 
-    events.emit('msg.debug.text_renderer', { msg = {
+    log.debug('text_renderer', {
         'Computed geometry:',
         'screen=' .. g.screen_width .. 'x' .. g.screen_height,
         'virtual=' .. g.virtual_height,
@@ -171,7 +172,7 @@ local function compute_text_geometry()
         'footer=' .. g.footer_height,
         'line_height=' .. g.line_height,
         'margin_top=' .. g.margin_top,
-    } })
+    })
 end
 
 ---Enhanced viewport calculation for body zone
@@ -283,8 +284,8 @@ local function initialize_overlay()
     renderer_state.overlay.res_y = 720 -- Standard resolution base
     renderer_state.initialized = true
 
-    events.emit('msg.debug.text_renderer', {
-        msg = 'MPV overlay initialized'
+    log.debug('text_renderer', {
+         'MPV overlay initialized'
     })
 end
 
@@ -513,13 +514,11 @@ local function generate_and_display_ass()
     -- Reset update flag
     renderer_state.needs_update = false
 
-    events.emit('msg.debug.text_renderer', {
-        msg = {
-            'Rendered:',
-            'header=' .. #renderer_state.header.items,
-            'body=' .. (view_end - view_start + 1) .. '/' .. #renderer_state.body.items,
-            'footer=' .. #renderer_state.footer.items
-        }
+    log.debug('text_renderer', {
+        'Rendered:',
+        'header=' .. #renderer_state.header.items,
+        'body=' .. (view_end - view_start + 1) .. '/' .. #renderer_state.body.items,
+        'footer=' .. #renderer_state.footer.items
     })
 end
 
@@ -540,11 +539,9 @@ local function handle_screen_resize(width, height)
     if old_body_height ~= renderer_state.geometry.body_height then
         renderer_state.needs_update = true
 
-        events.emit('msg.info.text_renderer', {
-            msg = {
-                'Geometry changed:',
-                old_body_height .. ' -> ' .. renderer_state.geometry.body_height .. ' body items'
-            }
+        log.info('text_renderer', {
+            'Geometry changed:',
+            old_body_height .. ' -> ' .. renderer_state.geometry.body_height .. ' body items'
         })
 
         -- Emit viewport changed event
@@ -567,8 +564,8 @@ local handlers = {
     ---@param data TextRendererRenderData|EventData|nil
     ['text_renderer.render'] = function(_, data)
         if not data then
-            events.emit('msg.warn.text_renderer', {
-                msg = 'Received render request with no data'
+            log.warn('text_renderer', {
+                 'Received render request with no data' 
             })
             return
         end
@@ -580,8 +577,8 @@ local handlers = {
             -- Update header zone
             if data.header then
                 if type(data.header.items) ~= 'table' then
-                    events.emit('msg.error.text_renderer', {
-                        msg = 'Header items must be a table/array'
+                    log.error('text_renderer', {
+                         'Header items must be a table/array'
                     })
                     return
                 end
@@ -593,8 +590,8 @@ local handlers = {
             -- Update body zone
             if data.body then
                 if type(data.body.items) ~= 'table' then
-                    events.emit('msg.error.text_renderer', {
-                        msg = 'Body items must be a table/array'
+                    log.error('text_renderer', {
+                         'Body items must be a table/array'
                     })
                     return
                 end
@@ -605,8 +602,8 @@ local handlers = {
             -- Update footer zone
             if data.footer then
                 if type(data.footer.items) ~= 'table' then
-                    events.emit('msg.error.text_renderer', {
-                        msg = 'Footer items must be a table/array'
+                    log.error('text_renderer', {
+                         'Footer items must be a table/array' 
                     })
                     return
                 end
@@ -618,8 +615,8 @@ local handlers = {
         -- Handle simple mode (backward compatible)
         elseif data.items then
             if type(data.items) ~= 'table' then
-                events.emit('msg.error.text_renderer', {
-                    msg = 'Items must be a table/array'
+                log.error('text_renderer', {
+                     'Items must be a table/array' 
                 })
                 return
             end
@@ -645,8 +642,8 @@ local handlers = {
                 renderer_state.body.selection_state = data.selection
                 renderer_state.needs_update = true
             else
-                events.emit('msg.warn.text_renderer', {
-                    msg = 'Selection state must be a table'
+                log.warn('text_renderer', {
+                     'Selection state must be a table' 
                 })
             end
         end
@@ -680,7 +677,9 @@ local handlers = {
             renderer_state.needs_update = true
             generate_and_display_ass()
         end
-        events.emit('msg.debug.text_renderer', { msg = 'Renderer activated' })
+        log.debug('text_renderer', {
+             'Renderer activated' 
+        })
     end,
 
     ---Hide overlay but preserve state
@@ -689,7 +688,9 @@ local handlers = {
         if renderer_state.overlay then
             remove_overlay()
         end
-        events.emit('msg.debug.text_renderer', { msg = 'Renderer hidden' })
+        log.debug('text_renderer', {
+             'Renderer hidden' 
+        })
     end,
 
     ---Clear content and hide
@@ -703,7 +704,9 @@ local handlers = {
         if renderer_state.overlay then
             remove_overlay()
         end
-        events.emit('msg.debug.text_renderer', { msg = 'Renderer cleared' })
+        log.debug('text_renderer', {
+             'Renderer cleared' 
+        })
     end,
 
     ---Handle screen resize with enhanced geometry calculation
@@ -718,8 +721,8 @@ local handlers = {
                 generate_and_display_ass()
             end
         else
-            events.emit('msg.warn.text_renderer', {
-                msg = 'Resize event missing screen dimensions'
+            log.warn('text_renderer', {
+                 'Resize event missing screen dimensions' 
             })
         end
     end,
@@ -746,7 +749,9 @@ end
 
 ---Initialize text renderer with enhanced setup
 function text_renderer.init()
-    events.emit('msg.debug.text_renderer', { msg = 'Initializing enhanced text renderer with layout zones...' })
+    log.debug('text_renderer', {
+         'Initializing enhanced text renderer with layout zones...' 
+    })
 
     -- Initialize geometry from current screen size
     local screen_width = mp.get_property_number('osd-width') or 1920
@@ -784,12 +789,10 @@ function text_renderer.init()
         end
     end)
 
-    events.emit('msg.info.text_renderer', {
-        msg = {
-            'Enhanced text renderer with zones initialized',
-            'Body capacity: ' .. renderer_state.geometry.body_height .. ' items',
-            'Screen: ' .. screen_width .. 'x' .. screen_height
-        }
+    log.info('text_renderer', {
+        'Enhanced text renderer with zones initialized',
+        'Body capacity: ' .. renderer_state.geometry.body_height .. ' items',
+        'Screen: ' .. screen_width .. 'x' .. screen_height
     })
 end
 
@@ -813,7 +816,9 @@ function text_renderer.cleanup()
     -- Cleanup event listeners
     events.cleanup_component('text_renderer')
 
-    events.emit('msg.info.text_renderer', { msg = 'Enhanced text renderer cleaned up' })
+    log.info('text_renderer', {
+        'Enhanced text renderer cleaned up'
+    })
 end
 
 return text_renderer

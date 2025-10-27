@@ -20,6 +20,7 @@ local mp = require 'mp'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 local options = require 'src.core.options'
 
 ---@class search
@@ -227,17 +228,17 @@ function SearchClient:_bind_navigation_keys()
         'search.active'
     )
 
-    events.emit('msg.verbose.search', { msg = {
+    log.verbose('search', {
         'Bound navigation keys'
-    } })
+    })
 end
 
 ---Unbind navigation keybinds
 function SearchClient:_unbind_navigation_keys()
     events.emit('input.unbind_group', { group = 'search.active' })
-    events.emit('msg.verbose.search', { msg = {
+    log.verbose('search', {
         'Unbound navigation keys'
-    } })
+    })
 end
 
 ---Release lock and cleanup
@@ -245,9 +246,9 @@ end
 local function release_lock(self)
     if active_client == self then
         active_client = nil
-        events.emit('msg.verbose.search', { msg = {
-                'Released global lock'
-        } })
+        log.verbose('search', {
+            'Released global lock'
+        })
     end
 end
 
@@ -284,9 +285,9 @@ function SearchClient:_complete_search()
     local selected_index = self.state.match_indices[self.state.current_position]
     local query = self.state.query
 
-    events.emit('msg.verbose.search', { msg = {
+    log.verbose('search', {
         'Search completed - selected index: ' .. selected_index
-    } })
+    })
 
     emit_event(self.events, 'completed', {
         query = query,
@@ -299,9 +300,9 @@ function SearchClient:_cancel_search()
 
     local query = self.state.query
 
-    events.emit('msg.verbose.search', { msg = {
+    log.verbose('search', {
         'Search cancelled by user'
-    } })
+    })
 
     emit_event(self.events, 'cancelled', {
         query = query,
@@ -311,9 +312,6 @@ end
 ---Cycle through search results, allowing user navigation
 ---@async
 function SearchClient:_cycle_search_results()
-    events.emit('msg.info.search', { msg = {
-        'Cycling through results...'
-    } })
     self._active_coroutine = coroutine.running()
 
     -- Bind keys for navigating results
@@ -348,16 +346,16 @@ function SearchClient:_search_coroutine(items)
     -- Check if mp.input is available
     local input_loaded, input = pcall(require, 'mp.input')
     if not input_loaded then
-        events.emit('msg.error.search', { msg = {
-                'mp.input module not available - search requires mpv 0.34+'
-        } })
+        log.error('search', {
+            'mp.input module not available - search requires mpv 0.34+'
+        })
         self:_cleanup(true)
         return
     end
 
-    events.emit('msg.verbose.search', { msg = {
+    log.verbose('search', {
         'Starting search coroutine'
-    } })
+    })
 
     -- Prompt for search query
     input.get({
@@ -378,9 +376,9 @@ function SearchClient:_search_coroutine(items)
 
     -- Handle cancellation
     if not submitted then
-        events.emit('msg.verbose.search', { msg = {
-                'User cancelled input prompt'
-        } })
+        log.verbose('search', {
+            'User cancelled input prompt'
+        })
         emit_event(self.events, 'cancelled', { query = nil })
         self:_cleanup(true)
         return
@@ -388,17 +386,17 @@ function SearchClient:_search_coroutine(items)
 
     -- Validate query
     if not query or query == '' then
-        events.emit('msg.verbose.search', { msg = {
-                'Empty search query'
-        } })
+        log.verbose('search', {
+            'Empty search query'
+        })
         emit_event(self.events, 'cancelled', { query = '' })
         self:_cleanup(true)
         return
     end
 
-    events.emit('msg.verbose.search', { msg = {
+    log.verbose('search', {
         'Searching for: "' .. query .. '"'
-    } })
+    })
 
     -- Store query
     self.state.query = query
@@ -409,9 +407,9 @@ function SearchClient:_search_coroutine(items)
 
     -- Check results
     if #filtered == 0 then
-        events.emit('msg.warn.search', { msg = {
-                'No matches found for: "' .. query .. '"'
-        } })
+        log.warn('search', {
+            'No matches found for: "' .. query .. '"'
+        })
         emit_event(self.events, 'no_results', {
             query = query,
         })
@@ -424,13 +422,13 @@ function SearchClient:_search_coroutine(items)
     self.state.match_indices = indices
     self.state.current_position = 1
 
-    events.emit('msg.info.search', { msg = {
+    log.info('search', {
         ('Found %d match%s for: "%s"'):format(
             #filtered,
             #filtered == 1 and '' or 'es',
             query
         )
-    } })
+    })
 
     -- Emit results event
     emit_event(self.events, 'results', {
@@ -456,17 +454,17 @@ end
 function SearchClient:execute(items)
     -- Check for global lock
     if active_client and active_client ~= self then
-        events.emit('msg.warn.search', { msg = {
-                'Search activation blocked - another search is active'
-        } })
+        log.warn('search', {
+            'Search activation blocked - another search is active'
+        })
         return false
     end
 
     -- Validate items
     if not items or #items == 0 then
-        events.emit('msg.warn.search', { msg = {
-                'No items provided for search'
-        } })
+        log.warn('search', {
+            'No items provided for search'
+        })
         return false
     end
 
@@ -474,9 +472,9 @@ function SearchClient:execute(items)
     active_client = self
     self.state.active = true
 
-    events.emit('msg.verbose.search', { msg = {
+    log.verbose('search', {
         'Activated search client'
-    } })
+    })
 
     -- Start search coroutine
     hh_utils.coroutine.run(function()
@@ -579,9 +577,9 @@ function SearchClient:cleanup()
     -- Unregister internal event handlers
     events.cleanup_component('search_client_' .. self._internal_id)
 
-    events.emit('msg.verbose.search', { msg = {
+    log.verbose('search', {
         'Cleaned up search client'
-    } })
+    })
 end
 
 return search

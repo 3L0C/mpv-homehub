@@ -12,7 +12,6 @@ local system = require 'src.core.system'
 local controllers = {
     content = require 'src.controllers.content',
     input = require 'src.controllers.input',
-    messenger = require 'src.controllers.messenger',
     navigation = require 'src.controllers.navigation',
     text = require 'src.controllers.ui.text',
     ui = require 'src.controllers.ui.ui',

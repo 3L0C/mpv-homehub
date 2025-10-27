@@ -6,6 +6,7 @@ local mp = require 'mp'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 local options = require 'src.core.options'
 local search = require 'src.core.search'
 
@@ -194,9 +195,7 @@ end
 ---@param data SearchResultsData
 local function render_search_results(data)
     if not search_client:is_active() then
-        events.emit('msg.warn.text', { msg = {
-            'Trying to render search results while client is inactive.'
-        } })
+        log.warn('text', {'Trying to render search results while client is inactive.'})
         return
     end
 
@@ -292,17 +291,17 @@ local handlers = {
                 -- Got our own context push event. Nothing to do.
             else
                 -- Someone is using the text_state.id context besides us...
-                events.emit('msg.warn.ui_text', { msg = {
+                log.warn('ui_text', {
                     ("Navigation context id '%s' pushed by another actor..."):format(text_state.id)
-                } })
+                })
             end
         elseif data.old_ctx == text_state.id then
             -- New context pushed
             if text_state.visible then
                 -- New context but we are still visible for some reason...
-                events.emit('msg.warn.ui_text', { msg = {
+                log.warn('ui_text', {
                     "Possibly overlapping ui after 'nav.context_push'. Emit 'ui.text.hide' first."
-                } })
+                })
             end
         end
     end,

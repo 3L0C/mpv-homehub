@@ -6,6 +6,7 @@ local utils = require 'mp.utils'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 
 ---@class navigation: Controller
 local navigation = {}
@@ -34,9 +35,9 @@ end
 ---Cleans up corrupted navigation state.
 ---@param nav_id NavID
 local function cleanup_corrupted_state(nav_id)
-    events.emit('msg.warn.navigation', { msg = {
+    log.warn('navigation', {
         'Cleaning up corrupted navigation state:', hh_utils.decode_nav_id(nav_id).rest
-    } })
+    })
 
     -- Remove from nav_table
     nav_id_table[nav_id] = nil
@@ -67,7 +68,9 @@ end
 ---@return boolean
 local function assert_nav_ctx_stack()
     if #nav_ctx_stack == 0 then
-        events.emit('msg.warn.navigation', { msg = { 'Navigation stack is empty' } })
+        log.warn('navigation', {
+             'Navigation stack is empty'
+        })
         return false
     end
     return true
@@ -78,7 +81,9 @@ end
 local function assert_nav_ctx_table()
     local top = nav_ctx_stack[#nav_ctx_stack]
     if not nav_ctx_table[top] or #nav_ctx_table[top] == 0 then
-        events.emit('msg.warn.navigation', { msg = { 'Navigation context is empty:', top } })
+        log.warn('navigation', {
+             'Navigation context is empty:', top
+        })
         return false
     end
     return true
@@ -138,9 +143,9 @@ end
 ---@param increment number
 local function safe_navigate(direction, state, increment)
     if state.total_items == 0 then
-        events.emit('msg.debug.navigation', { msg = {
+        log.debug('navigation', {
             'Cannot navigate', direction, '- no items in list'
-        } })
+        })
         return
     end
 
@@ -181,17 +186,17 @@ end
 ---@return boolean
 local function delete_current_context(event_name, ctx_id)
     if #nav_ctx_stack == 0 then
-        events.emit('msg.warn.navigation', { msg = {
+        log.warn('navigation', {
             ("Cannot delete context '%s', no context established."):format(ctx_id)
-        } })
+        })
         return false
     end
 
     if not in_context(ctx_id) then
-        events.emit('msg.error.navigation', { msg = {
+        log.error('navigation', {
             ("Current context does not match '%s' request:"):format(event_name),
             nav_ctx_stack[#nav_ctx_stack], ctx_id
-        } })
+        })
         return false
     end
 
@@ -233,9 +238,9 @@ local handlers = {
         if state.columns > 1 then
             safe_navigate('left', state, -1)
         else
-            events.emit('msg.debug.navigation', { msg = {
+            log.debug('navigation', {
                 "Ignoring 'nav.left' - single column context"
-            } })
+            })
         end
     end,
 
@@ -246,9 +251,9 @@ local handlers = {
         if state.columns > 1 then
             safe_navigate('right', state, 1)
         else
-            events.emit('msg.debug.navigation', { msg = {
+            log.debug('navigation', {
                 "Ignoring 'nav.right' - single column context"
-            } })
+            })
         end
     end,
 
@@ -262,18 +267,18 @@ local handlers = {
         end
 
         if #nav_ctx_stack == 0 or not nav_ctx_table[data.ctx_id] then
-            events.emit('msg.error.navigation', { msg = {
+            log.error('navigation', {
                 "Cannot navigate - context not initialized:", data.ctx_id,
                 "Use 'nav.context_push' first."
-            } })
+            })
             return
         end
 
         if not in_context(data.ctx_id) then
-            events.emit('msg.error.navigation', { msg = {
+            log.error('navigation', {
                 "Received 'nav.navigate_to' request for context different from the current one:",
                 data.ctx_id, nav_ctx_stack[#nav_ctx_stack]
-            } })
+            })
             return
         end
 
@@ -287,9 +292,9 @@ local handlers = {
         } --[[@as NavState]]
 
         if not is_valid_state(old_state) then
-            events.emit('msg.warn.navigation', { msg = {
+            log.warn('navigation', {
                 'Found corrupted navigation state for', nav_id, '- resetting.'
-            } })
+            })
             old_state = {
                 columns = 1,
                 position = data.position == 0 and 1 or data.position,
@@ -324,9 +329,9 @@ local handlers = {
 
     ['nav.back'] = function(_, _)
         if #nav_ctx_stack == 0 then
-            events.emit('msg.warn.navigation', { msg = {
+            log.warn('navigation', {
                 "Got 'nav.back' event, outside any navigation context."
-            } })
+            })
             return
         end
 
@@ -335,16 +340,16 @@ local handlers = {
 
         if not nav_hist or #nav_hist == 0 then
             -- 'nav.back' received before 'nav.navigate_to' received.
-            events.emit('msg.error.navigation', { msg = {
+            log.error('navigation', {
                 ("Got 'nav.back' in context '%s' with no history."):format(ctx_id)
-            } })
+            })
             -- Cleanup the invalid context.
             events.emit('nav.context_cleanup', { ctx_id = ctx_id })
             return
         elseif #nav_hist == 1 then
-            events.emit('msg.debug.navigation', { msg = {
+            log.debug('navigation', {
                 ("Ignoring 'nav.back' in context '%s' - already at root."):format(ctx_id)
-            } })
+            })
             return
         end
 
@@ -354,10 +359,10 @@ local handlers = {
         -- Ensure we are moving back to a valid state.
         local nav_state = nav_id_table[nav_id]
         if not nav_state or not is_valid_state(nav_state) then
-            events.emit('msg.error.navigation', { msg = {
+            log.error('navigation', {
                 ("Tried navigating back to '%s', but state is corrupted:"):format(nav_id),
                 utils.to_string(nav_state)
-            } })
+            })
 
             -- Cleanup the corrupted state
             nav_id_table[nav_id] = nil
@@ -400,10 +405,9 @@ local handlers = {
 
         if #nav_ctx_stack == 0 then nav_ctx_stack = {} end
         if nav_ctx_stack[#nav_ctx_stack] == data.ctx_id then
-            events.emit('msg.warn.navigation', { msg = {
-                "Ignoring redundant context push - already in context:",
-                data.ctx_id
-            } })
+            log.warn('navigation', {
+                "Ignoring redundant context push - already in context:", data.ctx_id
+            })
             return
         end
 
@@ -430,9 +434,9 @@ local handlers = {
         end
 
         if not delete_current_context(event_name, data.ctx_id) then
-            events.emit('msg.error.navigation', { msg = {
+            log.error('navigation', {
                 "Unable to pop context:", data.ctx_id
-            } })
+            })
             return
         end
 
@@ -451,9 +455,9 @@ local handlers = {
         end
 
         if not delete_current_context(event_name, data.ctx_id) then
-            events.emit('msg.error.navigation', { msg = {
+            log.error('navigation', {
                 "Unable to cleanup context:", data.ctx_id
-            } })
+            })
             return
         end
 
@@ -486,9 +490,9 @@ local handlers = {
             local nav_id_stack = nav_ctx_table[data.ctx_id]
 
             if not nav_id_stack or #nav_id_stack == 0 then
-                events.emit('msg.error.navigation', { msg = {
+                log.error('navigation', {
                     'Uninitialized context:', data.ctx_id
-                } })
+                })
                 return
             end
 
@@ -498,9 +502,9 @@ local handlers = {
         end
 
         if not state then
-            events.emit('msg.error.navigation', { msg = {
+            log.error('navigation', {
                 'Uninitialized context:', data.ctx_id
-            } })
+            })
             return
         end
 

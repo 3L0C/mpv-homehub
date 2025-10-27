@@ -6,6 +6,7 @@ local utils = require 'mp.utils'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 
 local adapter_manager = require 'src.models.base.adapter'
 local JellyfinClient = require 'src.models.adapters.jellyfin.client'
@@ -75,9 +76,9 @@ local function authenticate(adapter_id)
 
     jellyfin_state.auth_in_progress = true
 
-    events.emit('msg.info.' .. adapter_id, { msg = {
+    log.info(adapter_id, {
         'Connecting to', jellyfin_state.config.url
-    } })
+    })
 
     -- Authenticate using the Jellyfin client
     local success, err = jellyfin_client:authenticate(
@@ -91,17 +92,17 @@ local function authenticate(adapter_id)
         jellyfin_state.authenticated = true
         jellyfin_state.auth_failed = false
 
-        events.emit('msg.info.' .. adapter_id, { msg = {
+        log.info(adapter_id, {
             'Successfully authenticated with Jellyfin server'
-        } })
+        })
 
         return true
     else
         jellyfin_state.auth_failed = true
 
-        events.emit('msg.error.' .. adapter_id, { msg = {
+        log.error(adapter_id, {
             'Failed to authenticate with Jellyfin server:', err or 'unknown error'
-        } })
+        })
 
         return false
     end
@@ -151,9 +152,9 @@ local function handle_request(event_name, data)
         end
     end
 
-    events.emit('msg.debug.' .. adapter_id, { msg = {
+    log.debug(adapter_id, {
         'Handling request for nav_id:', nav_id
-    } })
+    })
 
     -- Fetch content from Jellyfin
     local jellyfin_items, err
@@ -184,9 +185,9 @@ local function handle_request(event_name, data)
     end
 
     if not item then
-        events.emit('msg.warn.' .. jellyfin_api.adapter_id, { msg = {
+        log.warn(jellyfin_api.adapter_id, {
             'Could not get item for nav_id:', data.nav_id or 'NONE'
-        } })
+        })
         item = jellyfin_root_item
     end
 
@@ -221,9 +222,9 @@ local function handle_navigate_to(event_name, data)
 
     local adapter_id = jellyfin_api.adapter_id
 
-    events.emit('msg.debug.' .. adapter_id, { msg = {
-        'Navigating to:', data.nav_id, 'selection:', data.selection
-    } })
+    log.debug(adapter_id, {
+        'Navigating to:', data.nav_id, 'selection:', tostring(data.selection)
+    })
 
     -- Get the selected item from cached current_items
     if data.selection < 1 or data.selection > #jellyfin_state.current_items then
@@ -282,9 +283,9 @@ local function handle_navigate_to(event_name, data)
         } --[[@as ContentLoadedData]])
     else
         -- Play the file
-        events.emit('msg.info.' .. adapter_id, { msg = {
+        log.info(adapter_id, {
             'Playing:', selected_item.Name
-        } })
+        })
 
         -- Hide UI
         events.emit('ui.hide')
@@ -293,9 +294,9 @@ local function handle_navigate_to(event_name, data)
         local success, err = jellyfin_client:play(selected_item)
 
         if not success then
-            events.emit('msg.error.' .. adapter_id, { msg = {
+            log.error(adapter_id, {
                 'Playback failed:', err or 'unknown error'
-            } })
+            })
 
             -- Restore UI on error
             events.emit('ui.show')
@@ -333,10 +334,10 @@ function adapter.init(config)
     -- Validate configuration
     local jellyfin_config, err = validate_config(config)
     if not jellyfin_config then
-        events.emit('msg.error.jellyfin', { msg = {
+        log.error('jellyfin', {
             'Jellyfin adapter validation failed: ' .. err,
             'Config: ' .. utils.to_string(config)
-        }, separator = '\n' } --[[@as MessengerData]])
+        }, '\n')
         return false
     end
 
@@ -387,9 +388,9 @@ function adapter.init(config)
     -- Register with content controller
     events.emit('content.register_adapter', jellyfin_api)
 
-    events.emit('msg.info.' .. jellyfin_api.adapter_id, { msg = {
+    log.info(jellyfin_api.adapter_id, {
         'Jellyfin adapter initialized (authentication deferred)'
-    } })
+    })
 
     return true
 end
@@ -399,9 +400,9 @@ function adapter.cleanup()
     events.cleanup_component(jellyfin_api.adapter_id)
 
     if jellyfin_state.authenticated then
-        events.emit('msg.info.' .. jellyfin_api.adapter_id, { msg = {
+        log.info(jellyfin_api.adapter_id, {
             'Disconnecting from Jellyfin server'
-        } })
+        })
 
         -- Stop any active playback
         if jellyfin_client:is_playing() then
@@ -409,9 +410,9 @@ function adapter.cleanup()
         end
     end
 
-    events.emit('msg.debug.' .. jellyfin_api.adapter_id, { msg = {
+    log.debug(jellyfin_api.adapter_id, {
         'Jellyfin instance cleaned up'
-    } })
+    })
 end
 
 return adapter

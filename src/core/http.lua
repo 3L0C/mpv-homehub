@@ -6,7 +6,7 @@
 local mp = require 'mp'
 local utils = require 'mp.utils'
 
-local events = require 'src.core.events'
+local log = require 'src.core.log'
 
 ---@class http
 local http = {}
@@ -63,9 +63,9 @@ function http.request(method, url, options)
         args = args,
     })
 
-    events.emit('msg.trace.http', { msg = {
+    log.trace('http', {
         'Result:', utils.to_string(result)
-    } })
+    })
 
     if not result then
         return nil, 'subprocess command returned nil'

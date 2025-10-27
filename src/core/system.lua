@@ -6,6 +6,7 @@ local mp = require 'mp'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 
 ---@class system: Controller
 local system = {
@@ -19,9 +20,7 @@ local system = {
 ---@type table<EventName,ListenerCB>
 local handlers = {
     ['sys.ready'] = function(_, _)
-        events.emit('msg.debug.system', {
-            msg = 'Ready!'
-        })
+        log.debug('system', 'Ready!')
     end,
 }
 

@@ -6,9 +6,10 @@
 local mp = require 'mp'
 local utils = require 'mp.utils'
 
-local http = require 'src.core.http'
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local http = require 'src.core.http'
+local log = require 'src.core.log'
 local options = require 'src.core.options'
 
 ---@class PlaybackState
@@ -666,9 +667,9 @@ function JellyfinClient:play_next(current_episode)
         end)
     elseif err then
         -- Error fetching next episode - just log it
-        events.emit('msg.warn.jellyfin_client', { msg = {
+        log.warn('jellyfin_client', {
             'Failed to fetch the next episode:', err
-        } })
+        })
     end
 end
 
@@ -688,9 +689,9 @@ function JellyfinClient:play_prev()
         end)
     elseif err then
         -- Error fetching next episode - just log it
-        events.emit('msg.warn.jellyfin_client', { msg = {
+        log.warn('jellyfin_client', {
             'Failed to fetch the next episode:', err
-        } })
+        })
     end
 end
 
@@ -741,14 +742,14 @@ local function on_file_loaded(self)
     -- Add external subtitles if available
     if item.MediaSources then
         for _, source in ipairs(item.MediaSources) do
-            events.emit('msg.trace.jellyfin_client', { msg = {
+            log.trace('jellyfin_client', {
                 'Source:', utils.to_string(source)
-            } })
+            })
             if source.Id == item.Id and source.MediaStreams then
                 for _, stream in ipairs(source.MediaStreams) do
-                    events.emit('msg.trace.jellyfin_client', { msg = {
+                    log.trace('jellyfin_client', {
                         'Stream:', utils.to_string(stream)
-                    } })
+                    })
                     if stream.IsTextSubtitleStream and stream.IsExternal and stream.Path then
                         local ext = stream.Path:match('.+%.([^.]+)$') or 'srt'
                         local sub_url = self.base_url .. '/Videos/' .. item.Id

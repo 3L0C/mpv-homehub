@@ -6,6 +6,7 @@ local opt = require 'mp.options'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 
 ---@class options
 local options = {
@@ -66,9 +67,9 @@ function options.init()
 
     local keybind_table, err = hh_utils.read_json_file(options.keybinds_file)
     if not keybind_table then
-        events.emit('msg.warn.options', { msg = {
+        log.warn('options', {
             'Unable to load keybind configuration, using defaults:', err
-        } })
+        })
     end
 
     options.keybinds = keybind_table or {}

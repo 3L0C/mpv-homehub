@@ -7,6 +7,7 @@ local utils = require 'mp.utils'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 
 --@class input: Controller
 local input = {}
@@ -76,10 +77,10 @@ local function unbind_to(stack, to)
     to = to or #stack
     to = to > 0 and to or 1
     if #stack < to then
-        events.emit('msg.error.input', { msg = {
+        log.error('input', {
             'Got invalid unbind request: from', tostring(#stack),
             'to:', tostring(to)
-        }})
+        })
     end
 
     -- Remove bindings
@@ -130,9 +131,9 @@ local handlers = {
     ['input.bind'] = function(_, data)
         local key, event, group, ctx, flags = get_input_data(data)
         if not is_valid_bind(key, event, group) then
-            events.emit('msg.error.input', { msg = {
+            log.error('input', {
                 "Got invalid data in 'input.bind' request:", utils.to_string(data)
-            } })
+            })
             return
         end
 
@@ -187,9 +188,9 @@ local handlers = {
         local keys_in_group = group_registry[group]
 
         if not keys_in_group then
-            events.emit('msg.debug.input', { msg = {
+            log.debug('input', {
                 'No bindings found for group:', group
-            } })
+            })
             return
         end
 
@@ -208,9 +209,9 @@ local handlers = {
     ['input.unbind'] = function(_, data)
         local key = get_input_data(data)
         if key == '' then
-            events.emit('msg.error.input', { msg = {
+            log.error('input', {
                 "Got invalid data in 'unbind' request:", utils.to_string(data)
-            } })
+            })
             return
         end
 

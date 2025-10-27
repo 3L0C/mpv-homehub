@@ -4,6 +4,7 @@
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 
 ---@class content: Controller
 local content = {}
@@ -55,9 +56,9 @@ local function handle_adapter_root_request(ctx_id, adapter_id)
         return
     end
 
-    events.emit('msg.debug.content', { msg = {
+    log.debug('content', {
         'Single adapter - requesting root content from:', adapter_id
-    } })
+    })
 
     events.emit(api.events.request, {
         ctx_id = ctx_id,
@@ -73,9 +74,9 @@ local function handle_root_request(ctx_id)
     local adapter_ids = get_registered_adapter_ids()
 
     if #adapter_ids == 0 then
-        events.emit('msg.warn.content', { msg = {
+        log.warn('content', {
             'Unable to access root content, no registered adapters.'
-        } })
+        })
         return
     elseif #adapter_ids == 1 then
         handle_adapter_root_request(ctx_id, adapter_ids[1])
@@ -97,9 +98,9 @@ local function handle_root_request(ctx_id)
     end
 
     if #items == 0 then
-        events.emit('msg.warn.content', { msg = {
+        log.warn('content', {
             'No valid adapters found for root menu.'
-        } })
+        })
         return
     elseif #items == 1 then
         -- Edge case: multiple adapter_ids but only one valid API
@@ -150,9 +151,9 @@ local function handle_adapter_selection(ctx_id, selection)
         return
     end
 
-    events.emit('msg.debug.content', { msg = {
+    log.debug('content', {
         'User selected adapter:', adapter_id,
-    } })
+    })
 
     events.emit(api.events.request, {
         ctx_id = ctx_id,
@@ -194,9 +195,9 @@ local function handle_navigation_request(ctx_id, nav_id, selection)
         return
     end
 
-    events.emit('msg.debug.content', { msg = {
+    log.debug('content', {
         'Routing request to:', adapter_id, 'location:', adapter_nav_id
-    } })
+    })
 
     events.emit(api.events.navigate_to, {
         ctx_id = ctx_id,
@@ -272,9 +273,9 @@ local handlers = {
 
         content_state.adapter_apis[data.adapter_id] = data
 
-        events.emit('msg.info.content', { msg = {
+        log.info('content', {
             'Registered adapter:', data.adapter_id, '(type:', data.adapter_type, ')'
-        } })
+        })
     end,
 
     ---@param event_name EventName
@@ -286,14 +287,14 @@ local handlers = {
         end
 
         if content_state.adapter_apis[data.adapter_id] then
-            events.emit('msg.info.content', { msg = {
+            log.info('content', {
                 'Unregistering adapter:', data.adapter_id
-            } })
+            })
             content_state.adapter_apis[data.adapter_id] = nil
         else
-            events.emit('msg.warn.content', { msg = {
+            log.warn('content', {
                 'Unregister request for unknown adapter:', data.adapter_id
-            } })
+            })
         end
     end,
 
@@ -305,9 +306,9 @@ local handlers = {
             return
         end
 
-        events.emit('msg.error.content', { msg = {
+        log.error('content', {
             'Adapter error:', data.adapter_id, '-', data.error or 'Unknown error'
-        } })
+        })
     end,
 }
 
@@ -323,9 +324,9 @@ function content.init()
         events.on(event, handler, 'content')
     end
 
-    events.emit('msg.info.content', { msg = {
+    log.info('content', {
         'Content controller initialized.'
-    } })
+    })
 end
 
 function content.cleanup()

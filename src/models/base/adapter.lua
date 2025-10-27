@@ -5,8 +5,8 @@
 local mp = require 'mp'
 local msg = require 'mp.msg'
 
-local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 local options = require 'src.core.options'
 
 ---@class adapter_manager
@@ -20,19 +20,6 @@ API_MAJOR, API_MINOR, API_PATCH = tonumber(API_MAJOR), tonumber(API_MINOR), tonu
 ---Loaded adapter instances
 ---@type table<AdapterID, Adapter>
 local loaded_adapters = {}
-
----Prints an error message and a stack trace.
----Can be passed directly to xpcall.
----@param errmsg string
----@param co? thread A coroutine to grab the stack trace from.
-local function adapter_traceback(errmsg, co)
-    if co then
-        msg.warn(debug.traceback(co))
-    else
-        msg.warn(debug.traceback("", 2))
-    end
-    msg.error(errmsg)
-end
 
 ---Create a prototypally inherited table
 ---@generic T: table
@@ -49,9 +36,9 @@ end
 local function check_api_version(adapter_module, adapter_id)
     local version = adapter_module.api_version
     if type(version) ~= 'string' then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             adapter_id .. ': field `api_version` must be a string, got', type(version)
-        } })
+        })
         return false
     end
 
@@ -59,25 +46,25 @@ local function check_api_version(adapter_module, adapter_id)
     major, minor = tonumber(major), tonumber(minor)
 
     if not major or not minor then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             ('%s: invalid version number, expected v%d.%d.x got v%s'):format(
                 adapter_id, API_MAJOR, API_MINOR, version
             )
-        } })
+        })
         return false
     elseif major ~= API_MAJOR then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             ('%s: has wrong major version, expected v%d.x.x, got v%s'):format(
                 adapter_id, API_MAJOR, version
             )
-        } })
+        })
         return false
     elseif minor > API_MINOR then
-        events.emit('msg.warn.adapter', { msg = {
+        log.warn('adapter', {
             ('%s: has newer minor version than API, expected v%d.%d.x, got v%s'):format(
                 adapter_id, API_MAJOR, API_MINOR, version
             )
-        } })
+        })
     end
 
     return true
@@ -132,9 +119,9 @@ local function load_adapter_file(file_path, adapter_id)
     if setfenv then
         chunk, err = loadfile(file_path)
         if not chunk then
-            events.emit('msg.error.adapter', { msg = {
+            log.error('adapter', {
                 'Failed to load adapter file:', err
-            } })
+            })
             return nil
         end
         ---@diagnostic disable-next-line deprecated
@@ -142,14 +129,14 @@ local function load_adapter_file(file_path, adapter_id)
     else
         chunk, err = loadfile(file_path, 'bt', env)
         if not chunk then
-            events.emit('msg.error.adapter', { msg = {
+            log.error('adapter', {
                 'Failed to load adapter file:', err
-            } })
+            })
             return nil
         end
     end
 
-    local success, result = xpcall(chunk, adapter_traceback)
+    local success, result = xpcall(chunk, hh_utils.traceback)
     return success and result or nil
 end
 
@@ -186,9 +173,9 @@ local function get_adapter_file_path(config)
     -- Internal adapter - construct path from script directory
     local script_dir = mp.get_script_directory()
     if not script_dir then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             'Cannot load adapter - script not running as directory script'
-        } })
+        })
         return nil
     end
 
@@ -202,40 +189,40 @@ local function load_adapter(config)
     -- Validate configuration
     local valid, err = validate_config(config)
     if not valid then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             'Invalid adapter config for', tostring(config.id or 'unknown'), ':', err
-        } })
+        })
         return false
     end
 
     if not config.enabled then
-        events.emit('msg.verbose.adapter', { msg = {
+        log.verbose('adapter', {
             'Skipping disabled adapter:', config.id
-        } })
+        })
         return true
     end
 
     -- Check if already loaded
     if loaded_adapters[config.id] then
-        events.emit('msg.warn.adapter', { msg = {
+        log.warn('adapter', {
             'Adapter already loaded:', config.id
-        } })
+        })
         return true
     end
 
     -- Get file path
     local file_path = get_adapter_file_path(config)
     if not file_path then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             'Could not determine file path for adapter:', config.id
-        } })
+        })
         return false
     end
 
     -- Load the adapter file in sandboxed environment
-    events.emit('msg.verbose.adapter', { msg = {
+    log.verbose('adapter', {
         'Loading adapter:', config.id, 'from', file_path
-    } })
+    })
 
     local adapter_module = load_adapter_file(file_path, config.id)
     if not adapter_module then
@@ -244,51 +231,51 @@ local function load_adapter(config)
 
     -- Check API version
     if not check_api_version(adapter_module, config.id) then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             'Aborting load of adapter', config.id, 'due to version mismatch'
-        } })
+        })
         return false
     end
 
     -- Verify the module has an init function
     if type(adapter_module.init) ~= 'function' then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             'Adapter', config.id, 'missing init function'
-        } })
+        })
         return false
     end
 
     -- Initialize the adapter
-    events.emit('msg.verbose.adapter', { msg = {
+    log.verbose('adapter', {
         'Initializing adapter:', config.id, '(type:', config.type, ')'
-    } })
+    })
 
     local success, result = xpcall(
         function() return adapter_module.init(config) end,
-        adapter_traceback
+        hh_utils.traceback
     )
 
     if not success then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             'Failed to initialize adapter', config.id, ':', tostring(result)
-        } })
+        })
         return false
     end
 
     -- Check if init failed
     if result == false then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             'Adapter', config.id, 'initialization failed.'
-        } })
+        })
         return false
     end
 
     -- Store the adapter instance
     loaded_adapters[config.id] = adapter_module
 
-    events.emit('msg.info.adapter', { msg = {
+    log.info('adapter', {
         'Successfully loaded adapter:', config.id
-    } })
+    })
 
     return true
 end
@@ -296,25 +283,25 @@ end
 ---Load all configured adapters from options
 function adapter_manager.load_adapters()
     if not options.adapter_config_file then
-        events.emit('msg.warn.adapter', { msg = {
+        log.warn('adapter', {
             'No defined adapter configuration file.'
-        } })
+        })
         return
     end
 
     if type(options.adapter_config_file) ~= 'string' then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             'Expected `adapter_config_file` to be a string, got:', type(options.adapter_config_file)
-        } })
+        })
         return
     end
 
     ---@type AdapterConfig[]?, string?
     local adapter_configs, err = hh_utils.read_json_file(options.adapter_config_file)
     if not adapter_configs then
-        events.emit('msg.error.adapter', { msg = {
+        log.error('adapter', {
             'Failed to load adapter configuration:', err
-        } })
+        })
         return
     end
 
@@ -345,24 +332,24 @@ end
 function adapter_manager.cleanup()
     for adapter_id, adapter in pairs(loaded_adapters) do
         if type(adapter.cleanup) == 'function' then
-            events.emit('msg.verbose.adapter', { msg = {
+            log.verbose('adapter', {
                 'Cleaning up adapter:', adapter_id
-            } })
+            })
 
             -- Use pcall to ensure one failing cleanup doesn't break others
             local success, err = pcall(adapter.cleanup)
             if not success then
-                events.emit('msg.error.adapter', { msg = {
+                log.error('adapter', {
                     'Error cleaning up adapter', adapter_id, ':', tostring(err)
-                } })
+                })
             end
         end
     end
     loaded_adapters = {}
 
-    events.emit('msg.debug.adapter', { msg = {
+    log.debug('adapter', {
         'Adapter manager cleanup complete'
-    } })
+    })
 end
 
 return adapter_manager

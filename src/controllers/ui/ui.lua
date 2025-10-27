@@ -7,6 +7,7 @@ local utils = require 'mp.utils'
 
 local events = require "src.core.events"
 local hh_utils = require 'src.core.utils'
+local log = require 'src.core.log'
 local options = require "src.core.options"
 
 ---@class ui: Controller
@@ -69,18 +70,14 @@ local function deactivate_mode()
     if not ui_state.is_active then return true end
 
     if not ui_state.active_mode then
-        events.emit('msg.error.ui', { msg = {
-            'Internal error: UI is active, but no mode is set...'
-        } })
+        log.error('ui', {'Internal error: UI is active, but no mode is set...'})
         return false
     end
 
     ui_state.transitioning = true
     events.emit('ui.' .. ui_state.active_mode .. '.deactivate')
     if ui_state.transitioning then
-        events.emit('msg.error.ui', { msg = {
-            ("UI deactivation request to '%s' mode was not honored."):format(ui_state.active_mode)
-        } })
+        log.error('ui', {("UI deactivation request to '%s' mode was not honored."):format(ui_state.active_mode)})
         ui_state.transitioning = false
         return false
     end
@@ -95,9 +92,9 @@ end
 local function activate_mode(mode)
     -- Only activate if mode is valid
     if not is_registered_mode(mode) then
-        events.emit('msg.error.ui', { msg = {
+        log.error('ui', {
             "Ignoring activation request for unrecognized UI mode:", utils.to_string(mode)
-        } })
+        })
         return
     end
 
@@ -116,9 +113,7 @@ local function activate_mode(mode)
     events.emit('ui.' .. mode .. '.activate')
 
     if ui_state.transitioning then
-        events.emit('msg.error.ui', { msg = {
-            ("UI activation request to '%s' mode was not honored."):format(mode),
-        } })
+        log.error('ui', {("UI activation request to '%s' mode was not honored."):format(mode)})
         ui_state.transitioning = false
         return
     end
@@ -126,9 +121,9 @@ local function activate_mode(mode)
     if ui_state.active_mode ~= mode then
         -- Should never have `ui_state.transitioning == false` but `ui_state.active_mode ~= mode`.
         -- This would only happen if `'ui.activated_mode'` contains an internal error.
-        events.emit('msg.error.ui', { msg = {
-            ("UI activation request to '%s' mode encountered internal error."):format(mode),
-        } })
+        log.error('ui', {
+            ("UI activation request to '%s' mode encountered internal error."):format(mode)
+        })
     end
 end
 
@@ -150,9 +145,9 @@ local function validate_mode(event_name, data)
     end
 
     if not is_registered_mode(data.mode) then
-        events.emit('msg.error.ui', { msg = {
+        log.error('ui', {
             'Got invalid ui mode:', utils.to_string(data.mode)
-        } })
+        })
         return nil
     end
 
@@ -183,10 +178,10 @@ local function validate_mode_transition(event_name, data)
     local mode = validate_mode(event_name, data)
 
     if mode and not ui_state.transitioning then
-        events.emit('msg.error.ui', { msg = {
+        log.error('ui', {
             ("Got '%s' event outside of transitioning state:"):format(event_name),
             mode
-        } })
+        })
         return nil
     end
 
@@ -217,10 +212,10 @@ local function validate_overlay(event_name, data)
     end
 
     if type(data.overlay) ~= 'string' then
-        events.emit('msg.error.ui', { msg = {
+        log.error('ui', {
             ("Got non-string overlay in event '%s':"):format(event_name),
             utils.to_string(data.overlay)
-        } })
+        })
         return nil
     end
 
@@ -248,18 +243,18 @@ local function make_overlay_stack_handler(on_success)
         if not overlay then return end
 
         if not ui_state.is_active then
-            events.emit('msg.warn.ui', { msg = {
+            log.warn('ui', {
                 ("Ignoring '%s' request - no main UI active:"):format(event_name),
                 overlay
-            } })
+            })
             return
         end
 
         if not ui_state.registered_overlays[overlay] then
-            events.emit('msg.error.ui', { msg = {
+            log.error('ui', {
                 ("Got unregistered overlay in '%s' request:"):format(event_name),
                 overlay
-            } })
+            })
             return
         end
 
@@ -274,16 +269,16 @@ local handlers = {
 
     ['ui.register_mode'] = make_mode_registration_handler(function(mode)
         ui_state.registered_modes[mode] = true
-        events.emit('msg.debug.ui', { msg = {
+        log.debug('ui', {
             'Registered mode:', mode
-        } })
+        })
     end),
 
     ['ui.unregister_mode'] = make_mode_registration_handler(function(mode)
         ui_state.registered_modes[mode] = false
-        events.emit('msg.debug.ui', { msg = {
+        log.debug('ui', {
             'Unregistered mode:', mode
-        } })
+        })
     end),
 
     ---@param event_name EventName
@@ -341,16 +336,16 @@ local handlers = {
 
     ['ui.register_overlay'] = make_overlay_registration_handler(function(overlay)
         ui_state.registered_overlays[overlay] = true
-        events.emit('msg.debug.ui', { msg = {
+        log.debug('ui', {
             'Registered overlay:', overlay
-        } })
+        })
     end),
 
     ['ui.unregister_overlay'] = make_overlay_registration_handler(function(overlay)
         ui_state.registered_overlays[overlay] = false
-        events.emit('msg.debug.ui', { msg = {
+        log.debug('ui', {
             'Unregistered overlay:', overlay
-        } })
+        })
     end),
 
     ['ui.show'] = function(_, _)
@@ -384,25 +379,26 @@ local handlers = {
 
         -- Activate the overlay
         events.emit('ui.' .. overlay .. '.activate')
-        events.emit('msg.debug.ui', { msg = {
+        log.debug('ui', {
             'Pushed overlay:', overlay, 'Stack:', table.concat(ui_state.overlay_stack, ', ')
-        } })
+        })
     end),
 
     ['ui.pop_overlay'] = make_overlay_stack_handler(function(overlay)
         -- Is `overlay` the current overlay?
         if #ui_state.overlay_stack == 0 then
-            events.emit('msg.warn.ui', { msg = {
+            log.warn('ui', {
                 'Ignoring overlay pop request - no active overlays:', overlay
-            } })
+            })
             return
         end
 
         if ui_state.overlay_stack[#ui_state.overlay_stack] ~= overlay then
-            events.emit('msg.warn.ui', { msg = {
-                'Ignoring overlay pop request - active overlay:', ui_state.overlay_stack[#ui_state.overlay_stack],
+            log.warn('ui', {
+                'Ignoring overlay pop request - active overlay:',
+                ui_state.overlay_stack[#ui_state.overlay_stack],
                 'got overlay:', overlay
-            } })
+            })
             return
         end
 
@@ -410,20 +406,20 @@ local handlers = {
         events.emit('ui.' .. overlay .. '.deactivate')
         table.remove(ui_state.overlay_stack)
 
-        events.emit('msg.debug.ui', { msg = {
+        log.debug('ui', {
             'Popped overlay:', overlay, 'Stack:', table.concat(ui_state.overlay_stack, ', ')
-        } })
+        })
 
         -- Show main UI or previous overlay.
         if #ui_state.overlay_stack == 0 then
-            events.emit('msg.debug.ui', { msg = {
+            log.debug('ui', {
                 'Activating hidden UI mode:', ui_state.active_mode
-            } })
+            })
             events.emit('ui.' .. ui_state.active_mode .. '.show')
         else
-            events.emit('msg.debug.ui', { msg = {
+            log.debug('ui', {
                 'Activating hidden overlay:', ui_state.overlay_stack[#ui_state.overlay_stack]
-            } })
+            })
             events.emit('ui.' .. ui_state.overlay_stack[#ui_state.overlay_stack] .. '.show')
         end
     end),

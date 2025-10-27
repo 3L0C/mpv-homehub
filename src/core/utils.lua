@@ -6,6 +6,7 @@ local mp = require 'mp'
 local utils = require 'mp.utils'
 
 local events = require 'src.core.events'
+local log = require 'src.core.log'
 
 ---@alias HandlerTable table<EventName,ListenerCB>
 
@@ -262,15 +263,15 @@ function hh_utils.is_nav_navigated_to(data)
         and (data.total_items == 0 or data.position <= data.total_items)
 end
 
----Wrapper for `events.emit('msg.error.controller')` when data is invalid.
+---Wrapper for `log.error(...)` when data is invalid.
 ---@param event_name EventName
 ---@param data EventData|nil
 ---@param controller string
 function hh_utils.emit_data_error(event_name, data, controller)
-    events.emit('msg.error.' .. controller, { msg = {
+    log.error(controller, {
         ("Received invalid data to '%s' request:"):format(event_name),
         utils.to_string(data)
-    } })
+    })
 end
 
 ---Concatenate two arrays into a new array.
@@ -335,9 +336,9 @@ end
 ---@return boolean
 function hh_utils.bind_keys(keys, event_name, group_name, ctx, flags)
     if type(keys) ~= 'table' then
-        events.emit('msg.error.hh_utils', { msg = {
+        log.error('hh_utils', {
             'Expected a list of key strings, got:', utils.to_string(keys)
-        } })
+        })
         return false
     end
 
@@ -362,20 +363,20 @@ end
 function hh_utils.handler_template(event_name, data, handlers, component)
     local fn = handlers[event_name]
     if type(fn) ~= 'function' then
-        events.emit('msg.warn.' .. component, { msg = {
+        log.warn(component, {
             'Got unhandled event:', event_name
-        } })
+        })
     else
-        events.emit('msg.debug.' .. component, { msg = {
+        log.debug(component, {
             ("Got event '%s' with data '%s'."):format(event_name, utils.to_string(data))
-        } })
+        })
         local success, err = pcall(fn, event_name, data)
         if not success then
-            events.emit('msg.error.' .. component, { msg = err })
+            log.error(component, err or 'unknown')
         else
-            events.emit('msg.trace.' .. component, { msg = {
+            log.trace(component, {
                 ("Successfully handled event '%s'."):format(event_name)
-            } })
+            })
         end
     end
 end
@@ -431,7 +432,9 @@ end
 function hh_utils.coroutine.callback(time_limit)
     local co = hh_utils.coroutine.assert("cannot create a coroutine callback for the main thread")
     local timer = time_limit and mp.add_timeout(time_limit, function()
-        events.emit('msg.debug.coroutine', { msg = { 'Time limit on callback expired' } })
+        log.debug('coroutine', {
+             'Time limit on callback expired'
+        })
         hh_utils.coroutine.resume_err(co, false)
     end)
 
