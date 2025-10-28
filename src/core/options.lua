@@ -43,13 +43,18 @@ local options = {
     cursor_icon = '▶',
     cursor_selected_icon = '➤',
 
+    -- Hint/detail display
+    font_size_hint = 0.75,  -- 75% of body font size for information density
+    font_color_hint = '999999',  -- Slightly dimmer than secondary
+
     -- Alignment
     align_x = 'left',
     align_y = 'top',
 
     -- Layout
     scaling_factor_body = 1,
-    screen_margin_ratio = 0.05,  -- 5% margins on top/bottom like gallery-view's 90%
+    screen_margin_ratio = 0.05,  -- 5% margins on top/bottom
+    char_width_multiplier = 3,   -- Character width estimation multiplier
 
     -- Adapter configuration
     adapter_config_file = '~~/script-opts/homehub-adapters.json',

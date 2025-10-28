@@ -181,10 +181,9 @@ local function render_cached_content(force_show)
         footer = {
             items = {
                 {
-                    primary_text = '/ - Search, ? - Help',
+                    lines = { '/ - Search, ? - Help' }
                 },
             },
-            style = 'spacious',
         },
         cursor_pos = text_state.cursor_pos,
         force_show = force_show,
@@ -206,19 +205,16 @@ local function render_search_results(data)
             header = {
                 items = {
                     {
-                        primary_text = ('Search Results: %d / %d match%s'):format(
-                            data.current_position,
-                            data.total_matches,
-                            data.total_matches == 1 and '' or 'es'
-                        ),
+                        lines = {
+                            ('Search Results: %d / %d match%s'):format(
+                                data.current_position,
+                                data.total_matches,
+                                data.total_matches == 1 and '' or 'es'
+                            ),
+                        },
                         style_variant = 'accent',
                     },
-                    {
-                        primary_text = hh_utils.separator,
-                        style_variant = 'secondary',
-                    },
                 },
-                style = 'compact',
             },
             body = {
                 items = text_state.search_results,
@@ -430,12 +426,10 @@ local handlers = {
             header = {
                 items = {
                     {
-                        primary_text = ('No results for query: "%s"'):format(data.query),
+                        lines = {
+                            ('No results for query: "%s"'):format(data.query),
+                        },
                         style_variant = 'accent',
-                    },
-                    {
-                        primary_text = hh_utils.separator,
-                        style_variant = 'secondary',
                     },
                 },
             },
@@ -457,16 +451,14 @@ local handlers = {
             header = {
                 items = {
                     {
-                        primary_text = ('Search Results: %d / %d match%s'):format(
-                            data.position,
-                            data.total,
-                            data.total == 1 and '' or 'es'
-                        ),
+                        lines = {
+                            ('Search Results: %d / %d match%s'):format(
+                                data.position,
+                                data.total,
+                                data.total == 1 and '' or 'es'
+                            ),
+                        },
                         style_variant = 'accent',
-                    },
-                    {
-                        primary_text = hh_utils.separator,
-                        style_variant = 'secondary',
                     },
                 },
                 style = 'compact',
@@ -500,22 +492,14 @@ local handlers = {
             push_crumb(data.content_title)
         end
 
-        local header_text = data.adapter_name
-
-        if #text_state.breadcrumb ~= 0 then
-            header_text = header_text .. ': ' .. get_breadcrumb()
-        end
-
         -- Cache header
         text_state.current_header = {
             items = {
                 {
-                    primary_text = header_text,
-                    style_variant = 'header',
-                },
-                {
-                    primary_text = hh_utils.separator,
-                    style_variant = 'secondary',
+                    lines = {
+                        data.adapter_name .. ':',
+                        get_breadcrumb(),
+                    }
                 },
             },
             style = 'compact',
@@ -541,17 +525,16 @@ local handlers = {
             body = {
                 items = {
                     {
-                        primary_text = 'Loading...',
+                        lines = { 'Loading...' },
                     },
                 },
             },
             footer = {
                 items = {
                     {
-                        primary_text = '/ - Search, ? - Help',
+                        lines = { '/ - Search, ? - Help' },
                     },
                 },
-                style = 'spacious',
             },
         } --[[@as TextRendererRenderData]])
     end,
@@ -567,12 +550,14 @@ local handlers = {
         if data.ctx_id ~= text_state.id then return end
 
         events.emit('text_renderer.render', {
-            items = {
-                {
-                    primary_text = data and data.msg or 'Error loading content...',
-                    highlight = true,
-                }
-            }
+            header = {
+                items = {
+                    {
+                        lines = { data and data.msg or 'Error loading content...', },
+                        highlight = true,
+                    }
+                },
+            },
         } --[[@as TextRendererRenderData]])
     end,
 }

@@ -5,7 +5,7 @@
 --  Supports both simple lists and zoned layouts (header/body/footer)
 --]]
 
-local mp       = require 'mp'
+local mp = require 'mp'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
@@ -42,6 +42,9 @@ local renderer_state = {
         selection_state = {},   -- Selection state for body items
         empty_text = 'No items available.',
     },
+    detail = {
+        height = 0,             -- Dynamic height based on cursor item's hint
+    },
     footer = {
         items = {},             -- Footer items (non-navigable)
         item_count = 0,         -- Computed height in lines
@@ -57,7 +60,16 @@ local renderer_state = {
         -- Zone heights (in lines)
         header_height = 0,       -- Reserved lines for header
         body_height = 0,         -- Available lines for body
+        detail_height = 0,       -- Reserved lines for detail (cursor item's hint)
         footer_height = 0,       -- Reserved lines for footer
+
+        -- Character limits per zone (calculated from OSD width)
+        char_limits = {
+            header = 100,
+            body = 100,
+            hint = 100,
+            footer = 100,
+        },
 
         -- Margins
         margin_top = 0,          -- Top margin for centering
@@ -65,6 +77,7 @@ local renderer_state = {
 
         -- Virtual resolution
         virtual_height = 720,    -- ASS virtual height
+        virtual_width = 1280,    -- ASS virtual width (calculated from aspect ratio)
 
         ok = false,              -- Whether geometry is properly initialized
     },
@@ -89,6 +102,7 @@ local renderer_state = {
         body = '',              -- Normal item text
         header = '',            -- Header style
         footer = '',            -- Footer style
+        hint = '',              -- Hint/detail style (smaller font)
         selected = '',          -- Selected item highlight
         cursor = '',            -- Cursor icon/marker
         multiselect = '',       -- Multi-selected items
@@ -98,29 +112,105 @@ local renderer_state = {
     },
 }
 
+---Truncate text to fit character limit with ellipsis
+---@param text string
+---@param limit number
+---@return string
+local function truncate_text(text, limit)
+    if not text then return '' end
+    if #text <= limit then return text end
+
+    -- Truncate and add ellipsis
+    return text:sub(1, math.max(1, limit - 1)) .. '…'
+end
+
+---Get text and style from a Line (string or StyledString)
+---@param line Line
+---@return string text
+---@return StyleVariant? style
+local function get_text_and_style(line)
+    if type(line) == 'string' then
+        return line, nil
+    elseif type(line) == 'table' and line.text then
+        return line.text, line.style
+    end
+    return '', nil
+end
+
+---Get ASS style string for a style variant
+---@param variant StyleVariant
+---@return string
+local function get_style_for_variant(variant)
+    if variant == 'accent' then
+        return renderer_state.style.accent
+    elseif variant == 'secondary' or variant == 'muted' then
+        return renderer_state.style.secondary
+    elseif variant == 'header' then
+        return renderer_state.style.header
+    end
+    return ''
+end
+
+---Concatenate lines with separator, handling StyledString
+---@param lines Line[]
+---@param separator string
+---@return string concatenated_text
+local function concatenate_lines(lines, separator)
+    local parts = {}
+    for _, line in ipairs(lines) do
+        local text, _ = get_text_and_style(line)
+        if text and #text > 0 then
+            table.insert(parts, text)
+        end
+    end
+    return table.concat(parts, separator)
+end
+
 ---Calculate zone heights and update geometry
 local function calculate_zone_heights()
     local g = renderer_state.geometry
 
-    -- Calculate header height (1 line per item, with extra spacing for 'spacious')
+    -- Calculate header height (accounting for multi-line items)
     local header_lines = 0
     if #renderer_state.header.items > 0 then
-        header_lines = #renderer_state.header.items
+        for _, item in ipairs(renderer_state.header.items) do
+            if item.lines then
+                header_lines = #item.lines
+            else
+                header_lines = header_lines + 1
+            end
+        end
         if renderer_state.header.style == 'spacious' then
             header_lines = header_lines + 1  -- Add blank line after header
         end
+        -- Add separator line
+        header_lines = header_lines + 1
     end
 
-    -- Calculate footer height
+    -- Calculate footer height (accounting for multi-line items)
     local footer_lines = 0
     if #renderer_state.footer.items > 0 then
-        footer_lines = #renderer_state.footer.items
+        for _, item in ipairs(renderer_state.footer.items) do
+            if item.lines then
+                footer_lines = #item.lines
+            else
+                footer_lines = footer_lines + 1
+            end
+        end
         if renderer_state.footer.style == 'spacious' then
             footer_lines = footer_lines + 1  -- Add blank line before footer
         end
     end
 
+    -- Calculate detail height (cursor-dependent, single line + separator)
+    local detail_lines = 0
+    local cursor_item = renderer_state.body.items[renderer_state.body.cursor_position]
+    if cursor_item and cursor_item.hint then
+        detail_lines = 2  -- separator + hint line
+    end
+
     g.header_height = header_lines
+    g.detail_height = detail_lines
     g.footer_height = footer_lines
 
     -- Calculate remaining height for body
@@ -130,10 +220,10 @@ local function calculate_zone_heights()
     local available_height = math.max(g.line_height, virtual_height - total_margin)
 
     -- Subtract zone heights from available height
-    local reserved_height = (header_lines + footer_lines) * g.line_height
+    local reserved_height = (header_lines + detail_lines + footer_lines) * g.line_height
     local body_available = math.max(g.line_height, available_height - reserved_height)
 
-    -- Calculate maximum displayable body items
+    -- Calculate maximum displayable body items (body always shows 1 line per item)
     local max_body_items = math.floor(body_available / g.line_height)
     g.body_height = math.max(1, max_body_items)
 
@@ -158,6 +248,56 @@ local function compute_text_geometry()
     -- All ASS rendering happens in this virtual space, NOT actual screen pixels
     g.virtual_height = renderer_state.overlay and renderer_state.overlay.res_y or 720
 
+    -- Calculate virtual width from aspect ratio
+    -- This ensures we work entirely in virtual coordinate space
+    local aspect_ratio = g.screen_width / g.screen_height
+    local virtual_width = g.virtual_height * aspect_ratio
+    g.virtual_width = virtual_width  -- Store for future use
+
+    -- Calculate character limits using VIRTUAL width (not actual screen pixels)
+    -- Using console.lua's formula: multiplier * width / font_size
+    -- Important: Both width and font_size must be in the same coordinate system (virtual units)
+
+    -- Define scaling factors for each zone (must match initialize_styles())
+    local HEADER_SCALE = 1.1   -- 10% larger font
+    local BODY_SCALE = 1.0     -- Base font size
+    local FOOTER_SCALE = 0.9   -- 10% smaller font
+    local hint_font_scale = options.font_size_hint or 0.75  -- 25% smaller by default
+
+    -- Calculate base font size for body
+    local body_font_size = options.scaling_factor_body * BASE_FONT_SIZE
+
+    -- Calculate character limits for each zone based on their actual font sizes
+    -- Larger fonts = fewer characters, smaller fonts = more characters
+    local header_font_size = body_font_size * HEADER_SCALE
+    local footer_font_size = body_font_size * FOOTER_SCALE
+    local hint_font_size = body_font_size * hint_font_scale
+
+    -- Use configurable character width multiplier
+    -- Default is 5 (from console.lua), but users can adjust (e.g., 3-4 for narrow/wide fonts)
+    local char_multiplier = options.char_width_multiplier or 5
+
+    -- Base calculation: multiplier * virtual_width / font_size * 0.9 safety factor
+    local safety_factor = 0.9
+
+    local base_char_limit = math.floor(char_multiplier * virtual_width / body_font_size * safety_factor)
+    local header_char_limit = math.floor(char_multiplier * virtual_width / header_font_size * safety_factor)
+    local footer_char_limit = math.floor(char_multiplier * virtual_width / footer_font_size * safety_factor)
+    local hint_char_limit = math.floor(char_multiplier * virtual_width / hint_font_size * safety_factor)
+
+    -- Account for margins (same ratio for all zones)
+    local margin_chars_body = math.floor(base_char_limit * options.screen_margin_ratio * 2)
+    local margin_chars_header = math.floor(header_char_limit * options.screen_margin_ratio * 2)
+    local margin_chars_footer = math.floor(footer_char_limit * options.screen_margin_ratio * 2)
+    local margin_chars_hint = math.floor(hint_char_limit * options.screen_margin_ratio * 2)
+
+    -- Body needs additional space for cursor icon (approximately 2 characters)
+    local icon_width = 2
+    g.char_limits.body = math.max(20, base_char_limit - icon_width - margin_chars_body)
+    g.char_limits.header = math.max(30, header_char_limit - margin_chars_header)
+    g.char_limits.footer = math.max(30, footer_char_limit - margin_chars_footer)
+    g.char_limits.hint = math.max(30, hint_char_limit - margin_chars_hint)
+
     -- Calculate zone heights
     calculate_zone_heights()
 
@@ -166,11 +306,14 @@ local function compute_text_geometry()
     log.debug('text_renderer', {
         'Computed geometry:',
         'screen=' .. g.screen_width .. 'x' .. g.screen_height,
-        'virtual=' .. g.virtual_height,
+        'virtual=' .. g.virtual_width .. 'x' .. g.virtual_height,
+        'aspect=' .. string.format('%.3f', aspect_ratio),
         'header=' .. g.header_height,
         'body=' .. g.body_height,
+        'detail=' .. g.detail_height,
         'footer=' .. g.footer_height,
         'line_height=' .. g.line_height,
+        'char_limits: header=' .. g.char_limits.header .. ', body=' .. g.char_limits.body .. ', footer=' .. g.char_limits.footer .. ', hint=' .. g.char_limits.hint,
         'margin_top=' .. g.margin_top,
     })
 end
@@ -252,6 +395,14 @@ local function initialize_styles()
         math.floor(options.scaling_factor_body * BASE_FONT_SIZE * 0.9),
         options.font_name_body,
         options.font_color_footer
+    )
+
+    -- Hint/detail style (smaller font for information density)
+    local hint_font_scale = options.font_size_hint or 0.75
+    style.hint = ([[{\r\q2\fs%d\fn%s\c&H%s&}]]):format(
+        math.floor(options.scaling_factor_body * BASE_FONT_SIZE * hint_font_scale),
+        options.font_name_body,
+        options.font_color_hint or options.font_color_secondary
     )
 
     -- Cursor style
@@ -345,32 +496,49 @@ local function render_cursor(position)
     end
 end
 
----Render a zone item (header or footer)
+---Render a zone item (header or footer) with multi-line support
 ---@param item Item
 ---@param zone_style string ASS style string for the zone
-local function render_zone_item(item, zone_style)
-    -- Apply zone style
-    append_to_buffer(zone_style)
+---@param char_limit number Character limit for this zone
+local function render_zone_item(item, zone_style, char_limit)
+    -- Render prefix icon on first line only
+    local prefix = item.prefix_icon and (item.prefix_icon .. '\\h') or ''
+    local prefix_width = item.prefix_icon and 2 or 0  -- Approximate icon width in characters
 
-    -- Apply item-specific styling if present
-    if item.style_variant then
-        if item.style_variant == 'accent' then
-            append_to_buffer(renderer_state.style.accent)
-        elseif item.style_variant == 'secondary' or item.style_variant == 'muted' then
-            append_to_buffer(renderer_state.style.secondary)
+    -- Render each line
+    for i, line in ipairs(item.lines) do
+        append_to_buffer(zone_style)
+
+        -- Add prefix to first line
+        if i == 1 then
+            append_to_buffer(prefix)
+        else
+            -- Indent continuation lines
+            append_to_buffer('  ')
         end
+
+        -- Get text and line-specific style
+        local text, line_style = get_text_and_style(line)
+
+        -- Apply item-level style variant (overrides line style)
+        if item.style_variant then
+            append_to_buffer(get_style_for_variant(item.style_variant))
+        elseif line_style then
+            -- Apply line-specific style if no item-level override
+            append_to_buffer(get_style_for_variant(line_style))
+        end
+
+        -- Truncate text to fit character limit (accounting for prefix/indent)
+        local effective_limit = char_limit - (i == 1 and prefix_width or 2)
+        local truncated = truncate_text(text, effective_limit)
+        local escaped = hh_utils.ass_escape(truncated, renderer_state.style.warning .. '…' .. zone_style)
+        append_to_buffer(escaped)
+
+        append_newline()
     end
-
-    -- Render text with proper ASS escaping
-    local display_text = item.primary_text or ''
-    local escaped_text = hh_utils.ass_escape(display_text, renderer_state.style.warning .. '…' .. zone_style)
-    append_to_buffer(escaped_text)
-
-    -- Add newline
-    append_newline()
 end
 
----Render a single body item with enhanced styling support
+---Render a single body item with line concatenation support
 ---@param item Item
 ---@param position number Position in body items
 local function render_body_item(item, position)
@@ -380,7 +548,7 @@ local function render_body_item(item, position)
     -- Render cursor
     render_cursor(position)
 
-    -- Apply item-specific styling
+    -- Apply selection styling
     local item_style = ''
     local multiselect_count = 0
     for _ in pairs(renderer_state.body.selection_state) do multiselect_count = multiselect_count + 1 end
@@ -394,17 +562,28 @@ local function render_body_item(item, position)
         append_to_buffer(item_style)
     end
 
-    -- Handle style variants (Phase 1 basic support)
+    -- Apply item-level style variant
     if item.style_variant then
-        if item.style_variant == 'accent' then
-            append_to_buffer(renderer_state.style.accent)
-        elseif item.style_variant == 'secondary' or item.style_variant == 'muted' then
-            append_to_buffer(renderer_state.style.secondary)
-        end
+        append_to_buffer(get_style_for_variant(item.style_variant))
     end
 
-    -- Render primary text with proper ASS escaping
-    local display_text = item.primary_text or 'Untitled'
+    -- Render prefix icon
+    if item.prefix_icon then
+        append_to_buffer(item.prefix_icon, '\\h')
+    end
+
+    -- Handle legacy items with primary_text
+    local display_text
+
+    -- Concatenate lines with separator
+    local separator = item.concat_separator or ' - '
+    display_text = concatenate_lines(item.lines, separator)
+
+    -- Truncate to fit character limit
+    local char_limit = renderer_state.geometry.char_limits.body
+    display_text = truncate_text(display_text, char_limit)
+
+    -- Escape and render
     local escaped_text = hh_utils.ass_escape(display_text, renderer_state.style.warning .. '…' .. item_style)
     append_to_buffer(escaped_text, '\\h')
 
@@ -412,18 +591,24 @@ local function render_body_item(item, position)
     append_newline()
 end
 
----Render the header zone
+---Render the header zone with auto-separator
 local function render_header()
     if #renderer_state.header.items == 0 then
         return
     end
 
     for _, item in ipairs(renderer_state.header.items) do
-        render_zone_item(item, renderer_state.style.header)
+        render_zone_item(item, renderer_state.style.header, renderer_state.geometry.char_limits.header)
     end
 
     -- Add spacing for spacious layout
     if renderer_state.header.style == 'spacious' then
+        append_newline()
+    end
+
+    -- Auto-separator if body exists
+    if #renderer_state.body.items > 0 then
+        append_to_buffer(renderer_state.style.secondary, hh_utils.separator)
         append_newline()
     end
 end
@@ -446,19 +631,45 @@ local function render_body(view_start, view_end)
     end
 end
 
----Render the footer zone
+---Render the detail zone (hint from cursor item)
+local function render_detail()
+    local cursor_item = renderer_state.body.items[renderer_state.body.cursor_position]
+    if not cursor_item or not cursor_item.hint then
+        return
+    end
+
+    -- Auto-separator before detail
+    append_to_buffer(renderer_state.style.secondary, hh_utils.separator)
+    append_newline()
+
+    -- Render hint with smaller font (single line, truncated)
+    append_to_buffer(renderer_state.style.hint)
+    local truncated = truncate_text(cursor_item.hint, renderer_state.geometry.char_limits.hint)
+    local escaped = hh_utils.ass_escape(truncated, renderer_state.style.warning .. '…' .. renderer_state.style.hint)
+    append_to_buffer(escaped)
+    append_newline()
+end
+
+---Render the footer zone with conditional auto-separator
 local function render_footer()
     if #renderer_state.footer.items == 0 then
         return
     end
 
     -- Add spacing for spacious layout
-    if renderer_state.footer.style == 'spacious' then
+    if renderer_state.footer.style ~= 'compact' then
+        append_newline()
+    end
+
+    -- Auto-separator if no detail was rendered (detail adds its own separator)
+    local cursor_item = renderer_state.body.items[renderer_state.body.cursor_position]
+    if not cursor_item or not cursor_item.hint then
+        append_to_buffer(renderer_state.style.secondary, hh_utils.separator)
         append_newline()
     end
 
     for _, item in ipairs(renderer_state.footer.items) do
-        render_zone_item(item, renderer_state.style.footer)
+        render_zone_item(item, renderer_state.style.footer, renderer_state.geometry.char_limits.footer)
     end
 end
 
@@ -488,6 +699,9 @@ local function generate_and_display_ass()
     -- Render body zone
     render_body(view_start, view_end)
 
+    -- Render detail zone (hint from cursor item)
+    render_detail()
+
     -- Render footer zone
     render_footer()
 
@@ -505,6 +719,7 @@ local function generate_and_display_ass()
         geometry = {
             body_height = renderer_state.geometry.body_height,
             header_height = renderer_state.geometry.header_height,
+            detail_height = renderer_state.geometry.detail_height,
             footer_height = renderer_state.geometry.footer_height,
             line_height = renderer_state.geometry.line_height,
             virtual_height = renderer_state.geometry.virtual_height,
@@ -518,6 +733,7 @@ local function generate_and_display_ass()
         'Rendered:',
         'header=' .. #renderer_state.header.items,
         'body=' .. (view_end - view_start + 1) .. '/' .. #renderer_state.body.items,
+        'detail=' .. renderer_state.geometry.detail_height,
         'footer=' .. #renderer_state.footer.items
     })
 end

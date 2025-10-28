@@ -112,10 +112,20 @@ end
 ---@param jf_item JellyfinItem
 ---@return Item
 local function jf_item_to_item(jf_item)
+    local hint = nil
+
+    if type(jf_item.Overview) == 'string' and jf_item.Overview ~= '' then
+        hint = jf_item.Overview
+    end
+
+    hint = hint and hint:sub(1, jellyfin_state.config.hint_limit or 100) .. '...'
+
     return {
-        primary_text = jf_item.Name or 'Unknown',
-        secondary_text = jf_item.Type or '',
-    }
+        lines = {
+            jf_item.Name or 'Unknown',
+        },
+        hint = hint,
+    } --[[@as Item]]
 end
 
 ---Handle content request from content controller

@@ -90,9 +90,10 @@ local function handle_root_request(ctx_id)
         local api = get_adapter_api(adapter_id)
         if api then
             table.insert(items, {
-                primary_text = api.adapter_name,
-                secondary_text = api.adapter_type,
-                -- Could add icons and such later...
+                lines = {
+                    api.adapter_name,
+                    api.adapter_type,
+                },
             } --[[@as Item]])
         end
     end

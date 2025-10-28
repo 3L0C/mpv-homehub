@@ -220,6 +220,31 @@ function JellyfinClient:get_views()
     return items, nil
 end
 
+---Add series context to episode names
+---@param items JellyfinItem[]?
+---@return JellyfinItem[]?
+local function add_series_context(items)
+    if not items then return items end
+
+    local result = {}
+    for _, item in ipairs(items) do
+        -- Shallow copy
+        local transformed = {}
+        for k, v in pairs(item) do
+            transformed[k] = v
+        end
+
+        -- Add series name for episodes
+        if item.Type == 'Episode' and item.SeriesName then
+            transformed.Name = item.SeriesName .. ' - ' .. (item.Name or 'Unknown')
+        end
+
+        table.insert(result, transformed)
+    end
+
+    return result
+end
+
 ---Get continue watching items
 ---@return JellyfinItem[]? items
 ---@return string? error
@@ -228,13 +253,22 @@ function JellyfinClient:get_continue_watching_items()
         return nil, 'not authenticated'
     end
 
-    local response, err = self:request('GET', '/Users/' .. self.user_id .. '/Items/Resume')
+    local query_string = http.build_query({
+        fields = {
+            'PrimaryImageAspectRatio',
+            'Overview',
+            'MediaSources',
+        },
+    })
 
+    local path = '/Users/' .. self.user_id .. '/Items/Resume?' .. query_string
+    local response, err = self:request('GET', path)
     if err then
         return nil, err
     end
 
-    return response and response.Items or {}, nil
+    local items = response and response.Items
+    return add_series_context(items) or {}, nil
 end
 
 ---Get next up episodes
@@ -248,14 +282,21 @@ function JellyfinClient:get_next_up_items()
     local query_string = http.build_query({
         userId = self.user_id,
         limit = self.view_limit,
+        fields = {
+            'PrimaryImageAspectRatio',
+            'Overview',
+            'MediaSources',
+        },
     })
+
     local response, err = self:request('GET', '/Shows/NextUp?' .. query_string)
 
     if err then
         return nil, err
     end
 
-    return response and response.Items or {}, nil
+    local items = response and response.Items
+    return add_series_context(items) or {}, nil
 end
 
 ---Get recently added items

@@ -1,26 +1,55 @@
 ---@meta _
-
+---
+---Style variant for text
+---@alias StyleVariant 'default'|'header'|'accent'|'secondary'|'muted'|nil
+---
+---Styled text with optional style variant
+---@class StyledString
+---@field text string The text content
+---@field style StyleVariant
+---
+---A line can be either plain text or styled text
+---@alias Line string|StyledString
+---
 ---Item returned by adapters with all available metadata.
 ---Adapters populate what they have, views use what they need.
+---
+---Display Behavior by Zone:
+---  - Body: Concatenates all lines with separator, truncates to single line
+---  - Header/Footer: Renders each line separately, wrapping/truncating independently
+---
 ---@class Item
 ---
 ---Core display fields (always present)
----@field primary_text string Main display text
----@field secondary_text string? Optional secondary display text
+---@field lines Line[] Main display text
+---  - Body zone: Lines are concatenated with concat_separator, then truncated to fit single line
+---  - Header/Footer zones: Each line renders separately with wrapping/truncation
+---  - Example body: lines = {"Episode Name", "Series Name"} → "Episode Name - Series Name"
+---  - Example header: lines = {"Adapter:", "Library / TV"} → "Adapter:" on line 1, "Library / TV" on line 2
 ---
---- Visual styling hints (optional, for text/list views)
----@field prefix_icon string? Optional leading icon/symbol
----@field suffix_text string? Optional trailing text/info
----@field style_variant 'default'|'header'|'accent'|'secondary'|'muted'|nil Visual style hint
----@field highlight boolean? Whether to highlight this item
----@field indent_level number? Visual indentation level (0-based)
+---Detail/Context display
+---@field hint string? Single-line detail text displayed above footer when this item is the cursor item
+---  - Rendered with smaller font size for increased information density
+---  - Truncated to fit single line (no wrapping)
+---  - Automatically shown/hidden based on cursor position
+---  - Example: "A high school chemistry teacher turned methamphetamine producer..."
+---
+---Visual styling hints (optional, for text/list views)
+---@field concat_separator string? Separator when concatenating lines in body zone (default: ' - ')
+---@field prefix_icon string? Icon/symbol rendered before lines[1]
+---  - Example: '📁' for folders, '🎬' for movies, '📺' for series
+---@field style_variant StyleVariant Visual style hint for the entire item, overrides line[n] styles
+---@field highlight boolean? Whether to highlight this item (visual emphasis)
+---@field indent_level number? Visual indentation level (0-based, for hierarchical displays)
 ---
 ---Rich metadata (optional, for gallery/grid views)
 ---@field thumbnail_url string? URL/path to thumbnail image
----@field image_aspect_ratio number? Aspect ratio for image display (e.g., 16/9)
+---@field image_aspect_ratio number? Aspect ratio for image display (e.g., 16/9, 2/3)
 ---@field duration_seconds number? Media duration in seconds
----@field media_type 'video'|'audio'|'image'|'folder'|'other'|nil Content type
+---@field media_type 'video'|'audio'|'image'|'folder'|'other'|nil Content type classification
 ---@field file_size number? File size in bytes
 ---
 ---Extended metadata (optional, adapter-specific)
 ---@field metadata table? Any additional adapter-specific data
+---  - Example: Jellyfin might store SeriesId, SeasonId, IndexNumber, etc.
+---  - Not directly rendered, but available for adapter-specific operations
