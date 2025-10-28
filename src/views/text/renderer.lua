@@ -89,16 +89,21 @@ local renderer_state = {
         overflow = false,       -- Whether body content exceeds viewport
     },
 
-    -- ASS rendering
+    -- ASS rendering - dual overlay system
     ---@type OSDOverlay
-    overlay = nil,
+    overlay_main = nil,      -- Header + body overlay (top-left aligned)
+    ---@type OSDOverlay
+    overlay_footer = nil,    -- Footer overlay (bottom-left aligned)
     needs_update = true,
     ---@type string[]
-    string_buffer = {},
+    string_buffer_main = {},
+    ---@type string[]
+    string_buffer_footer = {},
 
     -- Styling - pre-calculated ASS style strings
     style = {
-        global = '',            -- Global alignment/base style
+        global = '',            -- Global alignment/base style (top-left)
+        global_footer = '',     -- Footer overlay alignment (bottom-left)
         body = '',              -- Normal item text
         header = '',            -- Header style
         footer = '',            -- Footer style
@@ -121,7 +126,7 @@ local function truncate_text(text, limit)
     if #text <= limit then return text end
 
     -- Truncate and add ellipsis
-    return text:sub(1, math.max(1, limit - 1)) .. '…'
+    return text:sub(1, math.max(1, limit - 1)) .. '...'
 end
 
 ---Get text and style from a Line (string or StyledString)
@@ -188,11 +193,12 @@ local function calculate_zone_heights()
     end
 
     -- Calculate footer height (accounting for multi-line items)
+    -- Footer is in separate overlay, but we need to reserve space for it
     local footer_lines = 0
     if #renderer_state.footer.items > 0 then
         for _, item in ipairs(renderer_state.footer.items) do
             if item.lines then
-                footer_lines = #item.lines
+                footer_lines = footer_lines + #item.lines
             else
                 footer_lines = footer_lines + 1
             end
@@ -200,9 +206,12 @@ local function calculate_zone_heights()
         if renderer_state.footer.style == 'spacious' then
             footer_lines = footer_lines + 1  -- Add blank line before footer
         end
+        -- Add separator line
+        footer_lines = footer_lines + 1
     end
 
     -- Calculate detail height (cursor-dependent, single line + separator)
+    -- Detail is part of footer overlay
     local detail_lines = 0
     local cursor_item = renderer_state.body.items[renderer_state.body.cursor_position]
     if cursor_item and cursor_item.hint then
@@ -214,21 +223,29 @@ local function calculate_zone_heights()
     g.footer_height = footer_lines
 
     -- Calculate remaining height for body
+    -- Since footer is in a separate bottom-anchored overlay, we need to:
+    -- 1. Reserve space at the bottom for the footer overlay
+    -- 2. Calculate available space for main overlay (header + body)
     local virtual_height = g.virtual_height
     local margin_ratio = options.screen_margin_ratio
     local total_margin = virtual_height * margin_ratio * 2 -- Top + bottom
     local available_height = math.max(g.line_height, virtual_height - total_margin)
 
-    -- Subtract zone heights from available height
-    local reserved_height = (header_lines + detail_lines + footer_lines) * g.line_height
-    local body_available = math.max(g.line_height, available_height - reserved_height)
+    -- Reserve space for footer overlay (detail + footer zones + extra padding)
+    local footer_reserved = (detail_lines + footer_lines) * g.line_height
+    -- Add extra padding to prevent overlap (overestimating)
+    local footer_padding = g.line_height * 1.0  -- One full line of padding
+    footer_reserved = footer_reserved + footer_padding
+
+    -- Subtract header and footer reserved space from available height
+    local body_available = math.max(g.line_height, available_height - (header_lines * g.line_height) - footer_reserved)
 
     -- Calculate maximum displayable body items (body always shows 1 line per item)
     local max_body_items = math.floor(body_available / g.line_height)
     g.body_height = math.max(1, max_body_items)
 
-    -- Calculate centering margins
-    local total_used_height = (header_lines + g.body_height + footer_lines) * g.line_height
+    -- Calculate centering margins (not used with dual overlay system, but kept for compatibility)
+    local total_used_height = (header_lines + g.body_height) * g.line_height
     local remaining_height = virtual_height - total_used_height
     g.margin_top = math.max(0, remaining_height / 2)
     g.margin_bottom = remaining_height - g.margin_top
@@ -246,7 +263,7 @@ local function compute_text_geometry()
 
     -- Use virtual resolution for calculations (since overlay uses res_y = 720)
     -- All ASS rendering happens in this virtual space, NOT actual screen pixels
-    g.virtual_height = renderer_state.overlay and renderer_state.overlay.res_y or 720
+    g.virtual_height = renderer_state.overlay_main and renderer_state.overlay_main.res_y or 720
 
     -- Calculate virtual width from aspect ratio
     -- This ensures we work entirely in virtual coordinate space
@@ -373,8 +390,9 @@ local function initialize_styles()
 
     local style = renderer_state.style
 
-    -- Global alignment style
+    -- Global alignment styles for dual overlays
     style.global = ([[{\an%d}]]):format(ASS_ALIGNMENT_MATRIX[align_y][align_x])
+    style.global_footer = ([[{\an%d}]]):format(ASS_ALIGNMENT_MATRIX['bottom'][align_x])
 
     -- Body text style (file-browser pattern)
     style.body = ([[{\r\q2\fs%d\fn%s\c&H%s&}]]):format(
@@ -425,56 +443,84 @@ local function initialize_styles()
     style.warning = ([[{\c&H%s&}]]):format(options.font_color_warning)
 end
 
----Initialize MPV overlay system with proper error handling
+---Initialize MPV overlay system with dual overlays
 local function initialize_overlay()
-    if renderer_state.overlay then
-        renderer_state.overlay:remove()
+    if renderer_state.overlay_main then
+        renderer_state.overlay_main:remove()
+    end
+    if renderer_state.overlay_footer then
+        renderer_state.overlay_footer:remove()
     end
 
-    renderer_state.overlay = mp.create_osd_overlay("ass-events")
-    renderer_state.overlay.res_y = 720 -- Standard resolution base
+    -- Main overlay for header + body (top-left aligned)
+    renderer_state.overlay_main = mp.create_osd_overlay("ass-events")
+    renderer_state.overlay_main.res_y = 720 -- Standard resolution base
+
+    -- Footer overlay (bottom-left aligned)
+    renderer_state.overlay_footer = mp.create_osd_overlay("ass-events")
+    renderer_state.overlay_footer.res_y = 720 -- Standard resolution base
+
     renderer_state.initialized = true
 
     log.debug('text_renderer', {
-         'MPV overlay initialized'
+         'MPV dual overlays initialized'
     })
 end
 
 ---Append strings to the ASS buffer (file-browser pattern)
+---@param buffer_name 'main'|'footer' Which buffer to append to
 ---@param ... string
-local function append_to_buffer(...)
+local function append_to_buffer(buffer_name, ...)
+    local buffer = buffer_name == 'footer'
+        and renderer_state.string_buffer_footer
+        or renderer_state.string_buffer_main
+
     for i = 1, select("#", ...) do
         local str = select(i, ...)
         if str then
-            table.insert(renderer_state.string_buffer, str)
+            table.insert(buffer, str)
         end
     end
 end
 
 ---Add newline to ASS buffer
-local function append_newline()
-    table.insert(renderer_state.string_buffer, '\\N')
+---@param buffer_name 'main'|'footer' Which buffer to append to
+local function append_newline(buffer_name)
+    local buffer = buffer_name == 'footer'
+        and renderer_state.string_buffer_footer
+        or renderer_state.string_buffer_main
+    table.insert(buffer, '\\N')
 end
 
----Clear and flush string buffer to overlay
+---Clear and flush string buffers to overlays
 local function flush_buffer()
-    if renderer_state.overlay then
-        renderer_state.overlay.data = table.concat(renderer_state.string_buffer, '')
-        renderer_state.string_buffer = {}
+    if renderer_state.overlay_main then
+        renderer_state.overlay_main.data = table.concat(renderer_state.string_buffer_main, '')
+        renderer_state.string_buffer_main = {}
+    end
+    if renderer_state.overlay_footer then
+        renderer_state.overlay_footer.data = table.concat(renderer_state.string_buffer_footer, '')
+        renderer_state.string_buffer_footer = {}
     end
 end
 
 ---Update overlay display with error handling
 local function draw_overlay()
-    if renderer_state.overlay then
-        renderer_state.overlay:update()
+    if renderer_state.overlay_main then
+        renderer_state.overlay_main:update()
+    end
+    if renderer_state.overlay_footer then
+        renderer_state.overlay_footer:update()
     end
 end
 
----Remove overlay from display
+---Remove overlays from display
 local function remove_overlay()
-    if renderer_state.overlay then
-        renderer_state.overlay:remove()
+    if renderer_state.overlay_main then
+        renderer_state.overlay_main:remove()
+    end
+    if renderer_state.overlay_footer then
+        renderer_state.overlay_footer:remove()
     end
 end
 
@@ -483,38 +529,39 @@ end
 local function render_cursor(position)
     if position == renderer_state.body.cursor_position then
         if renderer_state.body.selection_state[position] then
-            append_to_buffer(renderer_state.style.cursor, options.cursor_selected_icon, '\\h')
+            append_to_buffer('main', renderer_state.style.cursor, options.cursor_selected_icon, '\\h')
         else
-            append_to_buffer(renderer_state.style.cursor, options.cursor_icon, '\\h')
+            append_to_buffer('main', renderer_state.style.cursor, options.cursor_icon, '\\h')
         end
     else
         if renderer_state.body.selection_state[position] then
-            append_to_buffer(options.selected_icon, '\\h')
+            append_to_buffer('main', options.selected_icon, '\\h')
         else
-            append_to_buffer(options.normal_icon, '\\h')
+            append_to_buffer('main', options.normal_icon, '\\h')
         end
     end
 end
 
 ---Render a zone item (header or footer) with multi-line support
+---@param buffer_name 'main'|'footer' Which buffer to append to
 ---@param item Item
 ---@param zone_style string ASS style string for the zone
 ---@param char_limit number Character limit for this zone
-local function render_zone_item(item, zone_style, char_limit)
+local function render_zone_item(buffer_name, item, zone_style, char_limit)
     -- Render prefix icon on first line only
     local prefix = item.prefix_icon and (item.prefix_icon .. '\\h') or ''
     local prefix_width = item.prefix_icon and 2 or 0  -- Approximate icon width in characters
 
     -- Render each line
     for i, line in ipairs(item.lines) do
-        append_to_buffer(zone_style)
+        append_to_buffer(buffer_name, zone_style)
 
         -- Add prefix to first line
         if i == 1 then
-            append_to_buffer(prefix)
+            append_to_buffer(buffer_name, prefix)
         else
             -- Indent continuation lines
-            append_to_buffer('  ')
+            append_to_buffer(buffer_name, '  ')
         end
 
         -- Get text and line-specific style
@@ -522,19 +569,19 @@ local function render_zone_item(item, zone_style, char_limit)
 
         -- Apply item-level style variant (overrides line style)
         if item.style_variant then
-            append_to_buffer(get_style_for_variant(item.style_variant))
+            append_to_buffer(buffer_name, get_style_for_variant(item.style_variant))
         elseif line_style then
             -- Apply line-specific style if no item-level override
-            append_to_buffer(get_style_for_variant(line_style))
+            append_to_buffer(buffer_name, get_style_for_variant(line_style))
         end
 
         -- Truncate text to fit character limit (accounting for prefix/indent)
         local effective_limit = char_limit - (i == 1 and prefix_width or 2)
         local truncated = truncate_text(text, effective_limit)
-        local escaped = hh_utils.ass_escape(truncated, renderer_state.style.warning .. '…' .. zone_style)
-        append_to_buffer(escaped)
+        local escaped = hh_utils.ass_escape(truncated, renderer_state.style.warning .. '...' .. zone_style)
+        append_to_buffer(buffer_name, escaped)
 
-        append_newline()
+        append_newline(buffer_name)
     end
 end
 
@@ -543,7 +590,7 @@ end
 ---@param position number Position in body items
 local function render_body_item(item, position)
     -- Apply base body style
-    append_to_buffer(renderer_state.style.body)
+    append_to_buffer('main', renderer_state.style.body)
 
     -- Render cursor
     render_cursor(position)
@@ -559,17 +606,17 @@ local function render_body_item(item, position)
         else
             item_style = renderer_state.style.selected
         end
-        append_to_buffer(item_style)
+        append_to_buffer('main', item_style)
     end
 
     -- Apply item-level style variant
     if item.style_variant then
-        append_to_buffer(get_style_for_variant(item.style_variant))
+        append_to_buffer('main', get_style_for_variant(item.style_variant))
     end
 
     -- Render prefix icon
     if item.prefix_icon then
-        append_to_buffer(item.prefix_icon, '\\h')
+        append_to_buffer('main', item.prefix_icon, '\\h')
     end
 
     -- Handle legacy items with primary_text
@@ -584,11 +631,11 @@ local function render_body_item(item, position)
     display_text = truncate_text(display_text, char_limit)
 
     -- Escape and render
-    local escaped_text = hh_utils.ass_escape(display_text, renderer_state.style.warning .. '…' .. item_style)
-    append_to_buffer(escaped_text, '\\h')
+    local escaped_text = hh_utils.ass_escape(display_text, renderer_state.style.warning .. '...' .. item_style)
+    append_to_buffer('main', escaped_text, '\\h')
 
     -- Add newline for next item
-    append_newline()
+    append_newline('main')
 end
 
 ---Render the header zone with auto-separator
@@ -598,18 +645,18 @@ local function render_header()
     end
 
     for _, item in ipairs(renderer_state.header.items) do
-        render_zone_item(item, renderer_state.style.header, renderer_state.geometry.char_limits.header)
+        render_zone_item('main', item, renderer_state.style.header, renderer_state.geometry.char_limits.header)
     end
 
     -- Add spacing for spacious layout
     if renderer_state.header.style == 'spacious' then
-        append_newline()
+        append_newline('main')
     end
 
     -- Auto-separator if body exists
     if #renderer_state.body.items > 0 then
-        append_to_buffer(renderer_state.style.secondary, hh_utils.separator)
-        append_newline()
+        append_to_buffer('main', renderer_state.style.secondary, hh_utils.separator)
+        append_newline('main')
     end
 end
 
@@ -619,8 +666,8 @@ end
 local function render_body(view_start, view_end)
     if #renderer_state.body.items == 0 then
         -- Show empty text
-        append_to_buffer(renderer_state.style.body, hh_utils.ass_escape(renderer_state.body.empty_text))
-        append_newline()
+        append_to_buffer('main', renderer_state.style.body, hh_utils.ass_escape(renderer_state.body.empty_text))
+        append_newline('main')
         return
     end
 
@@ -638,16 +685,17 @@ local function render_detail()
         return
     end
 
-    -- Auto-separator before detail
-    append_to_buffer(renderer_state.style.secondary, hh_utils.separator)
-    append_newline()
+    -- -- Auto-separator before detail
+    -- append_to_buffer('footer', renderer_state.style.secondary, hh_utils.separator)
+    -- append_newline('footer')
 
     -- Render hint with smaller font (single line, truncated)
-    append_to_buffer(renderer_state.style.hint)
+    append_to_buffer('footer', renderer_state.style.hint)
     local truncated = truncate_text(cursor_item.hint, renderer_state.geometry.char_limits.hint)
-    local escaped = hh_utils.ass_escape(truncated, renderer_state.style.warning .. '…' .. renderer_state.style.hint)
-    append_to_buffer(escaped)
-    append_newline()
+    local escaped = hh_utils.ass_escape(truncated, renderer_state.style.warning .. '...' .. renderer_state.style.hint)
+    append_to_buffer('footer', escaped)
+    append_newline('footer')
+    append_newline('footer')
 end
 
 ---Render the footer zone with conditional auto-separator
@@ -658,18 +706,19 @@ local function render_footer()
 
     -- Add spacing for spacious layout
     if renderer_state.footer.style ~= 'compact' then
-        append_newline()
+        append_newline('footer')
     end
 
     -- Auto-separator if no detail was rendered (detail adds its own separator)
-    local cursor_item = renderer_state.body.items[renderer_state.body.cursor_position]
-    if not cursor_item or not cursor_item.hint then
-        append_to_buffer(renderer_state.style.secondary, hh_utils.separator)
-        append_newline()
-    end
+    -- local cursor_item = renderer_state.body.items[renderer_state.body.cursor_position]
+    -- if not cursor_item or not cursor_item.hint then
+        append_to_buffer('footer', renderer_state.style.header)
+        append_to_buffer('footer', renderer_state.style.secondary, hh_utils.separator)
+        append_newline('footer')
+    -- end
 
     for _, item in ipairs(renderer_state.footer.items) do
-        render_zone_item(item, renderer_state.style.footer, renderer_state.geometry.char_limits.footer)
+        render_zone_item('footer', item, renderer_state.style.footer, renderer_state.geometry.char_limits.footer)
     end
 end
 
@@ -684,20 +733,13 @@ local function generate_and_display_ass()
         compute_text_geometry()
     end
 
-    -- Clear buffer
-    renderer_state.string_buffer = {}
+    -- Clear buffers
+    renderer_state.string_buffer_main = {}
+    renderer_state.string_buffer_footer = {}
 
-    -- Add global alignment style
-    append_to_buffer(renderer_state.style.global)
-
-    -- Render header zone
-    render_header()
-
-    -- Calculate viewport for body
-    local view_start, view_end, has_overflow = calculate_view_window()
-
-    -- Render body zone
-    render_body(view_start, view_end)
+    -- STEP 1: Render footer overlay (bottom-anchored)
+    -- Add bottom-left alignment style for footer overlay
+    append_to_buffer('footer', renderer_state.style.global_footer)
 
     -- Render detail zone (hint from cursor item)
     render_detail()
@@ -705,7 +747,21 @@ local function generate_and_display_ass()
     -- Render footer zone
     render_footer()
 
-    -- Flush buffer and draw
+    -- STEP 2: Render main overlay (top-anchored)
+    -- The geometry calculation already accounts for footer space
+    -- Add top-left alignment style for main overlay
+    append_to_buffer('main', renderer_state.style.global)
+
+    -- Render header zone
+    render_header()
+
+    -- Calculate viewport for body (geometry already reserves space for footer)
+    local view_start, view_end, has_overflow = calculate_view_window()
+
+    -- Render body zone
+    render_body(view_start, view_end)
+
+    -- Flush buffers and draw both overlays
     flush_buffer()
     draw_overlay()
 
@@ -901,9 +957,7 @@ local handlers = {
     ---Hide overlay but preserve state
     ['text_renderer.hide'] = function(_, _)
         renderer_state.active = false
-        if renderer_state.overlay then
-            remove_overlay()
-        end
+        remove_overlay()
         log.debug('text_renderer', {
             'Renderer hidden'
         })
@@ -917,9 +971,7 @@ local handlers = {
         renderer_state.body.cursor_position = 1
         renderer_state.body.selection_state = {}
         renderer_state.active = false
-        if renderer_state.overlay then
-            remove_overlay()
-        end
+        remove_overlay()
         log.debug('text_renderer', {
             'Renderer cleared'
         })
@@ -1014,10 +1066,13 @@ end
 
 ---Cleanup text renderer with enhanced cleanup
 function text_renderer.cleanup()
-    -- Remove overlay
-    if renderer_state.overlay then
+    -- Remove overlays
+    if renderer_state.overlay_main then
         remove_overlay()
-        renderer_state.overlay = nil
+        renderer_state.overlay_main = nil
+    end
+    if renderer_state.overlay_footer then
+        renderer_state.overlay_footer = nil
     end
 
     -- Reset state
@@ -1026,7 +1081,8 @@ function text_renderer.cleanup()
     renderer_state.header.items = {}
     renderer_state.body.items = {}
     renderer_state.footer.items = {}
-    renderer_state.string_buffer = {}
+    renderer_state.string_buffer_main = {}
+    renderer_state.string_buffer_footer = {}
     renderer_state.geometry.ok = false
 
     -- Cleanup event listeners
