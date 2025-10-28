@@ -1006,6 +1006,21 @@ local handlers = {
             active = renderer_state.active
         })
     end,
+
+    -- TODO: decide if we need a flag to hide the footer until
+    -- show footer is sent, or if we should rename this to something
+    -- that makes it clear that this will only hide until the next
+    -- call to `generate_and_display_ass()` (i.e., window resize, etc.)
+    ---Hide the footer
+    ['text_renderer.hide_footer'] = function(_, _)
+        if renderer_state.overlay_footer then
+            renderer_state.overlay_footer:remove()
+        end
+
+        log.info('text_renderer', {
+            'Footer overlay hidden'
+        })
+    end,
 }
 
 ---Main handler using HomeHub template pattern

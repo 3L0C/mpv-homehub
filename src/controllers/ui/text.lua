@@ -200,37 +200,45 @@ local function render_search_results(data)
 
     text_state.search_results = data.filtered_items
 
+    ---@type TextRendererZone
+    local header = nil
     if options.search.show_match_count then
-        events.emit('text_renderer.render', {
-            header = {
-                items = {
-                    {
-                        lines = {
-                            ('Search Results: %d / %d match%s'):format(
-                                data.current_position,
-                                data.total_matches,
-                                data.total_matches == 1 and '' or 'es'
-                            ),
-                        },
-                        style_variant = 'accent',
+        header = {
+            items = {
+                {
+                    lines = {
+                        ('Search Results: %d / %d match%s'):format(
+                            data.current_position,
+                            data.total_matches,
+                            data.total_matches == 1 and '' or 'es'
+                        ),
                     },
+                    style_variant = 'accent',
                 },
             },
-            body = {
-                items = text_state.search_results,
-            },
-            cursor_pos = data.current_position,
-            force_show = true,
-        } --[[@as TextRendererRenderData]])
-    else
-        events.emit('text_renderer.render', {
-            body = {
-                items = text_state.search_results,
-            },
-            cursor_pos = data.current_position,
-            force_show = true,
-        } --[[@as TextRendererRenderData]])
+        }
     end
+
+    ---@type TextRendererZone
+    local footer = {
+        items = {
+            {
+                lines = {
+                    data.binds_hint
+                },
+            }
+        },
+    }
+
+    events.emit('text_renderer.render', {
+        header = header,
+        body = {
+            items = text_state.search_results,
+        },
+        footer = footer,
+        cursor_pos = data.current_position,
+        force_show = true,
+    } --[[@as TextRendererRenderData]])
 end
 
 ---@type HandlerTable
@@ -371,6 +379,7 @@ local handlers = {
     ['search.text.activate'] = function(_, _)
         if not text_state.active then return end
 
+        events.emit('text_renderer.hide_footer')
         if search_client:execute(text_state.current_items) then
             log.warn('ui_text', {
                 'Could not start search.'

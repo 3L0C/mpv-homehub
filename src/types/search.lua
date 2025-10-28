@@ -29,6 +29,7 @@
 ---@field current_position number Current position in filtered list (always 1 initially)
 ---@field current_item Item Item at current position
 ---@field current_original_index number Original index of current item
+---@field binds_hint string Hint string for active search keybinds
 ---
 ---Position changed event data
 ---@class SearchPositionChangedData

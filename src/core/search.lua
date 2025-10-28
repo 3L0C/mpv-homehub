@@ -164,6 +164,24 @@ end
 ---@param query string Normalized query string
 ---@return boolean
 local function item_matches_query(config, item, query)
+    for _, line in ipairs(item.lines) do
+        local text = ''
+
+        if type(line) == 'table' then
+            text = line.text
+        elseif type(line) == 'string' then
+            text = line
+        end
+
+        local normalized_value = config.case_sensitive
+            and text
+            or text:lower()
+
+        if normalized_value:find(query, 1, true) then
+            return true
+        end
+    end
+
     for _, field in ipairs(config.search_fields) do
         local field_value = item[field]
         if field_value and type(field_value) == 'string' then
@@ -200,6 +218,27 @@ local function filter_items(config, items, query)
     end
 
     return filtered, indices
+end
+
+---Get hint text for search keybinds
+---@return string hint
+function SearchClient:get_binds_hint()
+    local hint = {
+        ('%s - Next'):format(
+            table.concat(self.config.keybinds.next_result, '/')
+        ),
+        ('%s - Prev'):format(
+            table.concat(self.config.keybinds.prev_result, '/')
+        ),
+        ('%s - Quit'):format(
+            table.concat(self.config.keybinds.cancel, '/')
+        ),
+        ('%s - Select'):format(
+            table.concat(self.config.keybinds.select_result, '/')
+        ),
+    }
+
+    return table.concat(hint, ', ')
 end
 
 ---Bind navigation keybinds
@@ -341,7 +380,7 @@ end
 ---@async
 ---@param items Item[]
 function SearchClient:_search_coroutine(items)
-    local co = hh_utils.coroutine.assert("cannot create a coroutine callback for the main thread")
+    local co = hh_utils.coroutine.assert('cannot create a coroutine callback for the main thread')
     self._active_coroutine = co
 
     -- Check if mp.input is available
@@ -360,8 +399,8 @@ function SearchClient:_search_coroutine(items)
 
     -- Prompt for search query
     input.get({
-        prompt = "Search: ",
-        id = "homehub/search/" .. self._internal_id,
+        prompt = 'Search: ',
+        id = 'homehub/search/' .. self._internal_id,
         default_text = "",
         submit = hh_utils.coroutine.guard_wrapped_callback(true, function()
             return self._active_coroutine == co
@@ -440,6 +479,7 @@ function SearchClient:_search_coroutine(items)
         current_position = 1,
         current_item = filtered[1],
         current_original_index = indices[1],
+        binds_hint = self:get_binds_hint(),
     })
 
     hh_utils.coroutine.run(function()

@@ -62,7 +62,7 @@ local options = {
     -- Search configuration
     search_case_sensitive = false,
     search_show_match_count = true,
-    search_fields = 'primary_text,secondary_text',
+    search_fields = 'hint,metadata',
 }
 
 function options.init()
@@ -93,7 +93,7 @@ function options.init()
 
     -- Defaults if empty
     if #options.search.search_fields == 0 then
-        options.search.search_fields = {'primary_text', 'secondary_text'}
+        options.search.search_fields = {'hint'}
     end
 end
 
