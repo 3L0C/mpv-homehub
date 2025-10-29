@@ -4,6 +4,7 @@
 ---@class ContentRequestData
 ---@field ctx_id NavCtxID
 ---@field nav_id NavID
+---@field force boolean?
 ---
 ---Represents a selection request
 ---@class ContentNavToData

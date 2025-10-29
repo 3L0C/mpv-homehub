@@ -3,6 +3,7 @@
 --]]
 
 local mp = require 'mp'
+local utils = require 'mp.utils'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
@@ -18,12 +19,12 @@ local ui_text = {}
 ---@field active boolean
 ---@field visible boolean
 ---@field needs_render boolean
----@field keybinds TextKeyTable
+---@field keybinds TextKeyTable?
 ---@field keybinds_active boolean
----@field keybinds_set boolean
 ---@field cursor_pos number
 ---@field current_header TextRendererZone?
 ---@field current_items Item[]
+---@field current_nav_id NavID
 ---@field breadcrumb string[]
 ---@field search_events SearchClientEventMap
 ---@field search_results Item[]?
@@ -32,12 +33,12 @@ local text_state = {
     active = false,
     visible = false,
     needs_render = true,
-    keybinds = {},
+    keybinds = nil,
     keybinds_active = false,
-    keybinds_set = false,
     cursor_pos = 1,
     current_header = nil,
     current_items = {},
+    current_nav_id = '',
     breadcrumb = {},
     search_events = {
         results = 'search.text.results',
@@ -53,7 +54,7 @@ local search_client
 
 ---Set the keybind table to user defined keys or defaults
 local function set_keybind_table()
-    if text_state.keybinds_set then return end
+    if text_state.keybinds ~= nil then return end
 
     ---@type TextKeyTable
     local text_keybind_table = options.keybinds and options.keybinds.text or {}
@@ -69,9 +70,8 @@ local function set_keybind_table()
         search = text_keybind_table.search or {'/'},
         help = text_keybind_table.help or {'?'},
         toggle = text_keybind_table.toggle or {'CTRL+j', 'MENU'},
+        refresh = text_keybind_table.refresh or {'R'},
     }
-
-    text_state.keybinds_set = true
 end
 
 ---Bind the default navigation keys.
@@ -113,6 +113,11 @@ local function bind_keys()
     hh_utils.bind_keys(
         text_state.keybinds.search,
         'search.text.activate',
+        'ui_text.active'
+    )
+    hh_utils.bind_keys(
+        text_state.keybinds.refresh,
+        'ui_text.user.refresh',
         'ui_text.active'
     )
     -- TODO: implement actual events for these keys
@@ -170,6 +175,22 @@ local function pop_crumb()
     return table.remove(text_state.breadcrumb)
 end
 
+---@return string
+local function get_binds_hint()
+    if not text_state.active then return '' end
+
+    local hint = {
+        ('%s - Search'):format(
+            table.concat(text_state.keybinds.search, '/')
+        ),
+        ('%s - Refresh'):format(
+            table.concat(text_state.keybinds.refresh, '/')
+        ),
+    }
+
+    return table.concat(hint, ', ')
+end
+
 ---Render cached content
 ---@param force_show boolean?
 local function render_cached_content(force_show)
@@ -181,7 +202,7 @@ local function render_cached_content(force_show)
         footer = {
             items = {
                 {
-                    lines = { '/ - Search, ? - Help' }
+                    lines = { get_binds_hint() }
                 },
             },
         },
@@ -277,7 +298,7 @@ local handlers = {
 
     ['ui.text.hide'] = function(_, _)
         unbind_keys()
-        events.emit('text_renderer.clear')
+        events.emit('text_renderer.hide')
     end,
 
     -- Navigation events
@@ -319,6 +340,9 @@ local handlers = {
 
         -- Not our navigation request
         if data.ctx_id ~= text_state.id then return end
+
+        -- Cache nav_id
+        text_state.current_nav_id = data.nav_id
 
         if data.trigger == 'back' then
             -- Update breadcrumb
@@ -487,7 +511,11 @@ local handlers = {
 
         if data.ctx_id ~= text_state.id then return end
 
+        -- Cache items
         text_state.current_items = data.items
+
+        -- Cache nav_id
+        text_state.current_nav_id = data.nav_id
 
         events.emit('nav.navigate_to', {
             ctx_id = text_state.id,
@@ -518,7 +546,7 @@ local handlers = {
     end,
 
     ---@param event_name EventName
-    ---@param data ContentLoadingData|EventData|nil
+    ---@param data ContentLoadingData|EventData
     ['content.loading'] = function(event_name, data)
         if not data or not data.ctx_id then
             hh_utils.emit_data_error(event_name, data, 'ui_text')
@@ -549,7 +577,7 @@ local handlers = {
     end,
 
     ---@param event_name EventName
-    ---@param data ContentErrorData|EventData|nil
+    ---@param data ContentErrorData|EventData
     ['content.error'] = function(event_name, data)
         if not data or not data.ctx_id then
             hh_utils.emit_data_error(event_name, data, 'ui_text')
@@ -568,6 +596,30 @@ local handlers = {
                 },
             },
         } --[[@as TextRendererRenderData]])
+    end,
+
+    -- User driven events
+
+    ['ui_text.user.refresh'] = function(_, _)
+        if not text_state.active then
+            log.error(text_state.id, {
+                'Got refresh request while inactive...'
+            })
+            return
+        end
+
+        if text_state.current_nav_id == '' then
+            log.debug(text_state.id, {
+                'No content to refresh.'
+            })
+            return
+        end
+
+        events.emit('content.request', {
+            ctx_id = text_state.id,
+            nav_id = text_state.current_nav_id,
+            force = true,
+        } --[[@as ContentRequestData]])
     end,
 }
 

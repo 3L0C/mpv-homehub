@@ -86,7 +86,11 @@ function events.on(event_name, callback, component_name)
         })
     end
 
-    log.trace('events', {'Added listener for', event_name, 'from component', component_name})
+    log.trace('events', {
+        ("Added listenr for '%s' from component '%s'"):format(
+            event_name, component_name
+        ),
+    })
 end
 
 ---Remove event listener(s)

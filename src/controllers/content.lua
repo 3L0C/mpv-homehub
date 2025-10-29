@@ -244,6 +244,7 @@ local handlers = {
         events.emit(api.events.request, {
             ctx_id = data.ctx_id,
             nav_id = adapter_nav_id,
+            force = data.force,
             adapter_id = adapter_id,
         } --[[@as AdapterRequestData]])
     end,

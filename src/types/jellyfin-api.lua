@@ -47,4 +47,4 @@
 ---@class JellyfinConfig: AdapterConfig
 ---@field views JellyfinViews?
 ---@field view_limit number?
----@field hint_limit number?
+---@field update_cache number? Time in seconds to periodically update cache

@@ -52,6 +52,7 @@
 ---@class AdapterRequestData
 ---@field ctx_id NavCtxID 
 ---@field nav_id NavID
+---@field force boolean?
 ---@field adapter_id AdapterID
 ---
 ---Represents the data sent during an adapter navigate to event.

@@ -26,6 +26,7 @@
 ---@field search string[]?
 ---@field help string[]?
 ---@field toggle string[]?
+---@field refresh string[]?
 ---
 ---Gallery keybind table
 ---@class GalleryKeyTable
