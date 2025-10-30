@@ -36,6 +36,7 @@ local options = require 'src.core.options'
 ---@field playback_state PlaybackState
 ---@field view_limit number
 ---@field views JellyfinViews
+---@field completion_thresh number
 local JellyfinClient = {}
 JellyfinClient.__index = JellyfinClient
 
@@ -93,6 +94,7 @@ function JellyfinClient.new(config, api)
     self.keybind_handlers_configured = false
     self.view_limit = config.view_limit or 25
     self.views = config.views or {}
+    self.completion_thresh = config.completion_thresh or 0.95
 
     -- Device info for authentication
     self.device_id = 'mpv-homehub-1'
@@ -446,6 +448,32 @@ function JellyfinClient:mark_played(item_id)
     end
 
     return true, nil
+end
+
+---Mark item as played if playback completion exceeds threshold
+---Only marks on natural completion (eof), user stop, or quit - not on errors
+---@param reason 'eof'|'stop'|'quit'|'error'|'redirect'|'unknown'
+---@param jf_item JellyfinItem
+function JellyfinClient:mark_played_if(reason, jf_item)
+    -- Only mark on intentional completion
+    if reason ~= 'eof' and reason ~= 'stop' and reason ~= 'quit' then
+        return
+    end
+
+    -- Validate runtime data
+    if type(jf_item.RunTimeTicks) ~= 'number' or jf_item.RunTimeTicks <= 0 then
+        return
+    end
+
+    if type(self.playback_state.position_ticks) ~= 'number' or self.playback_state.position_ticks < 0 then
+        return
+    end
+
+    -- Mark played if threshold met
+    local percent_complete = self.playback_state.position_ticks / jf_item.RunTimeTicks
+    if percent_complete >= self.completion_thresh then
+        self:mark_played(jf_item.Id)
+    end
 end
 
 ---Get stream URL for a media item
@@ -825,6 +853,7 @@ local function on_end_file(self, data)
 
     -- Report stop to Jellyfin
     self:report_playback_stop(item.Id)
+    self:mark_played_if(data.reason, item)
 
     -- Check if we should auto-play next episode
     local should_play_next = false

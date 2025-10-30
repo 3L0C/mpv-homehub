@@ -48,3 +48,4 @@
 ---@field views JellyfinViews?
 ---@field view_limit number?
 ---@field update_cache number? Time in seconds to periodically update cache
+---@field completion_thresh number? Percent to consider an item complete on eof, quit, or stop (default: 0.95)
