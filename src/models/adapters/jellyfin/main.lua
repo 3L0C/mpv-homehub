@@ -80,6 +80,23 @@ local function validate_config(config)
     return config --[[@as JellyfinConfig]]
 end
 
+---Validate user settings. If success is true, but msg is not nil, issue msg as a warning.
+---@return boolean success
+---@return string? msg
+local function validate_user_settings()
+
+    -- 'loop-file' can cause reporting issues
+    local loop_file = mp.get_property('loop-file')
+    if loop_file ~= 'no' then
+        return true,
+            ("Option '%s' set to '%s' - use 'no' to avoid reporting issues"):format(
+                'loop-file', utils.to_string(loop_file)
+            )
+    end
+
+    return true, nil
+end
+
 ---Authenticate with the Jellyfin server
 ---@param adapter_id AdapterID 
 ---@return boolean success
@@ -485,6 +502,18 @@ function adapter.init(config)
             'Config: ' .. utils.to_string(config)
         }, '\n')
         return false
+    end
+
+    local success, msg = validate_user_settings()
+    if not success then
+        log.error('jellyfin', {
+            'User settings error:', msg
+        })
+        return false
+    end
+
+    if type(msg) == 'string' then
+        log.warn('jellyfin', msg)
     end
 
     -- Define adapter api

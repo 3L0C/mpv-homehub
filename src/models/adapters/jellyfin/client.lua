@@ -311,6 +311,11 @@ function JellyfinClient:get_latest_items()
 
     local query_string = http.build_query({
         limit = self.view_limit,
+        fields = {
+            'PrimaryImageAspectRatio',
+            'Overview',
+            'MediaSources',
+        },
     })
     local path = '/Users/' .. self.user_id .. '/Items/Latest?' .. query_string
     local response, err = self:request('GET', path)
@@ -440,7 +445,14 @@ function JellyfinClient:mark_played(item_id)
         return false, 'not authenticated'
     end
 
-    local path = '/Users/' .. self.user_id .. '/PlayedItems/' .. item_id
+    log.info('jellyfin_client', {
+        'Marking item played:', item_id
+    })
+
+    local query_string = http.build_query({
+        userId = self.user_id,
+    })
+    local path = '/UserPlayedItems/' .. item_id .. '?' .. query_string
     local _, err = self:request('POST', path)
 
     if err then
@@ -455,6 +467,12 @@ end
 ---@param reason 'eof'|'stop'|'quit'|'error'|'redirect'|'unknown'
 ---@param jf_item JellyfinItem
 function JellyfinClient:mark_played_if(reason, jf_item)
+    log.debug('jellyfin_client', {
+        ("mark_played_if(reason: '%s', jf_item.RunTimeTicks: '%d', self.position_ticks: '%d')"):format(
+            reason, jf_item.RunTimeTicks or 0, self.playback_state.position_ticks or 0
+        )
+    })
+
     -- Only mark on intentional completion
     if reason ~= 'eof' and reason ~= 'stop' and reason ~= 'quit' then
         return
@@ -726,14 +744,13 @@ function JellyfinClient:play_next(current_episode)
 
     if next_episode then
         -- Small delay before starting next episode
-        mp.add_timeout(0.25, function()
-            local success, play_err = self:play(next_episode)
-            if success then
-                mp.osd_message('Playing next: ' .. (next_episode.Name or 'Unknown'))
-            else
-                mp.osd_message('Failed to play next episode: ' .. (play_err or 'unknown error'))
-            end
-        end)
+        local success, play_err = self:play(next_episode)
+        if success then
+            self.playback_state.current_item = next_episode
+            mp.osd_message('Playing next: ' .. (next_episode.Name or 'Unknown'))
+        else
+            mp.osd_message('Failed to play next episode: ' .. (play_err or 'unknown error'))
+        end
     elseif err then
         -- Error fetching next episode - just log it
         log.warn('jellyfin_client', {
@@ -799,6 +816,10 @@ local function on_file_loaded(self)
         return
     end
 
+    log.info('jellyfin_client', {
+        'Item loaded - Name:', item.Name, 'ID:', tostring(item.Id)
+    })
+
     -- Seek to last playback position
     if self.playback_state.position_ticks > 0 then
         local target = self.playback_state.position_ticks / 10000000
@@ -850,6 +871,10 @@ local function on_end_file(self, data)
         -- TODO: proper error handling
         return
     end
+
+    log.info('jellyfin_client', {
+        'Item ended - Name:', item.Name, 'ID:', tostring(item.Id)
+    })
 
     -- Report stop to Jellyfin
     self:report_playback_stop(item.Id)
@@ -971,6 +996,10 @@ function JellyfinClient:play(item)
     if item.Name then
         mp.set_property('force-media-title', item.Name)
     end
+
+    log.info('jellyfin_client', {
+        'Playing item - Name:', item.Name, 'ID:', item.Id
+    })
 
     if type(self.events.sync) == 'string' then
         events.emit(self.events.sync, {
