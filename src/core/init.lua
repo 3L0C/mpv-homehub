@@ -28,22 +28,26 @@ return {
     start = function()
         -- Initialize core
         options.init()
-        events.init()
+        if options.enable then
+            events.init()
 
-        -- Initialize controllers
-        for _, controller in pairs(controllers) do
-            controller.init()
+            -- Initialize controllers
+            for _, controller in pairs(controllers) do
+                controller.init()
+            end
+
+            -- Initialize views
+            for _, view in pairs(views) do
+                view.init()
+            end
+
+            -- Load configured adapters
+            adapter_manager.load_adapters()
+
+            -- Start HomeHub
+            system.init()
+        else
+            (require 'src.core.log').info('core', 'HomeHub disabled - exiting.')
         end
-
-        -- Initialize views
-        for _, view in pairs(views) do
-            view.init()
-        end
-
-        -- Load configured adapters
-        adapter_manager.load_adapters()
-
-        -- Start HomeHub
-        system.init()
     end
 }

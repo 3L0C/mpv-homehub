@@ -9,6 +9,9 @@ local log = require 'src.core.log'
 
 ---@class options
 local options = {
+    -- Enable HomeHub
+    enable = true,
+
     -- directory to load external modules - currently only user-input-module
     module_directory = '~~/script-modules',
 
@@ -44,8 +47,8 @@ local options = {
     cursor_selected_icon = '➤',
 
     -- Hint/detail display
-    font_size_hint = 0.75,  -- 75% of body font size for information density
-    font_color_hint = '999999',  -- Slightly dimmer than secondary
+    font_size_hint = 0.75,      -- 75% of body font size for information density
+    font_color_hint = '999999', -- Slightly dimmer than secondary
 
     -- Alignment
     align_x = 'left',
@@ -53,8 +56,8 @@ local options = {
 
     -- Layout
     scaling_factor_body = 1,
-    screen_margin_ratio = 0.05,  -- 5% margins on top/bottom
-    char_width_multiplier = 3,   -- Character width estimation multiplier
+    screen_margin_ratio = 0.05, -- 5% margins on top/bottom
+    char_width_multiplier = 3,  -- Character width estimation multiplier
 
     -- Adapter configuration
     adapter_config_file = '~~/script-opts/homehub-adapters.json',
@@ -93,7 +96,7 @@ function options.init()
 
     -- Defaults if empty
     if #options.search.search_fields == 0 then
-        options.search.search_fields = {'hint'}
+        options.search.search_fields = { 'hint' }
     end
 end
 
