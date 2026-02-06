@@ -29,6 +29,7 @@
 ---@field SeasonId string? UUID of parent season (for episodes)
 ---@field IndexNumber integer? Episode number
 ---@field ParentIndexNumber integer? Season number
+---@field ProductionYear integer? Series production year
 ---@field UserData JellyfinUserData? User data object
 ---@field SeriesName string? Series name
 ---@field VirtualType 'continue_watching'|'next_up'|'latest'|nil

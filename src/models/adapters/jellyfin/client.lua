@@ -384,6 +384,7 @@ function JellyfinClient:get_items(parent_id, params)
             'PrimaryImageAspectRatio',
             'Overview',
             'MediaSources',
+            'ProductionYear'
         },
         -- Default sorting goal: Sort series name > season number > episode number
         sortBy = {
@@ -537,7 +538,7 @@ function JellyfinClient:get_next_episode(current_episode)
     local query_params = {
         userId = self.user_id,
         parentId = season_id,
-        fields = 'PrimaryImageAspectRatio,Overview,MediaSources',
+        fields = 'PrimaryImageAspectRatio,Overview,MediaSources,ProductionYear',
         sortBy = 'IndexNumber',
         sortOrder = 'Ascending',
     }
@@ -573,7 +574,7 @@ function JellyfinClient:get_next_episode(current_episode)
     local seasons_response, seasons_err = self:request('GET', '/Users/' .. self.user_id .. '/Items?' .. seasons_query)
 
     if not seasons_response or seasons_err then
-        return nil, nil  -- End of series, not an error
+        return nil, nil -- End of series, not an error
     end
 
     -- Find the next season
@@ -590,7 +591,7 @@ function JellyfinClient:get_next_episode(current_episode)
     end
 
     if not next_season_id then
-        return nil, nil  -- No next season
+        return nil, nil -- No next season
     end
 
     -- Get first episode of next season
@@ -604,7 +605,8 @@ function JellyfinClient:get_next_episode(current_episode)
     }
 
     local next_season_query = http.build_query(next_season_params)
-    local next_season_response, next_season_err = self:request('GET', '/Users/' .. self.user_id .. '/Items?' .. next_season_query)
+    local next_season_response, next_season_err = self:request('GET',
+        '/Users/' .. self.user_id .. '/Items?' .. next_season_query)
 
     if not next_season_response or next_season_err then
         return nil, next_season_err
@@ -614,7 +616,7 @@ function JellyfinClient:get_next_episode(current_episode)
         return next_season_response.Items[1], nil
     end
 
-    return nil, nil  -- No episodes in next season
+    return nil, nil -- No episodes in next season
 end
 
 ---Get previous episode for a series
@@ -642,7 +644,7 @@ function JellyfinClient:get_prev_episode(current_episode)
     local query_params = {
         userId = self.user_id,
         parentId = season_id,
-        fields = 'PrimaryImageAspectRatio,Overview,MediaSources',
+        fields = 'PrimaryImageAspectRatio,Overview,MediaSources,ProductionYear',
         sortBy = 'IndexNumber',
         sortOrder = 'Ascending',
     }
@@ -975,6 +977,28 @@ function JellyfinClient:setup_keybind_handlers()
     self.keybind_handlers_configured = true
 end
 
+---Return title formatted based on contents of item
+---@param item JellyfinItem The item used to derive the title
+---@return string title The formated title
+local function format_title(item)
+    local title = item.Name or 'Unknown'
+    if item.SeriesName then
+        local s = item.ParentIndexNumber or '?'
+        local e = item.IndexNumber or '?'
+        title = ('%s - S%s:E%s - %s'):format(
+            item.SeriesName,
+            s,
+            e,
+            item.Name or 'Unknown'
+        )
+    end
+    if item.ProductionYear then
+        title = title .. ' (' .. item.ProductionYear .. ')'
+    end
+
+    return title
+end
+
 ---Play a Jellyfin item
 ---@param item JellyfinItem The item to play
 ---@return boolean success
@@ -993,9 +1017,7 @@ function JellyfinClient:play(item)
     mp.commandv('loadfile', stream_url)
 
     -- Set media title
-    if item.Name then
-        mp.set_property('force-media-title', item.Name)
-    end
+    mp.set_property('force-media-title', format_title(item))
 
     log.info('jellyfin_client', {
         'Playing item - Name:', item.Name, 'ID:', item.Id
