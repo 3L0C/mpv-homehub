@@ -238,6 +238,7 @@ local function add_series_context(items)
 
         -- Add series name for episodes
         if item.Type == 'Episode' and item.SeriesName then
+            transformed.EpisodeTitle = item.EpisodeTitle or item.Name
             transformed.Name = item.SeriesName .. ' - ' .. (item.Name or 'Unknown')
         end
 
@@ -260,6 +261,8 @@ function JellyfinClient:get_continue_watching_items()
             'PrimaryImageAspectRatio',
             'Overview',
             'MediaSources',
+            'ProductionYear',
+            'EpisodeTitle',
         },
     })
 
@@ -288,6 +291,8 @@ function JellyfinClient:get_next_up_items()
             'PrimaryImageAspectRatio',
             'Overview',
             'MediaSources',
+            'ProductionYear',
+            'EpisodeTitle',
         },
     })
 
@@ -315,6 +320,8 @@ function JellyfinClient:get_latest_items()
             'PrimaryImageAspectRatio',
             'Overview',
             'MediaSources',
+            'ProductionYear',
+            'EpisodeTitle',
         },
     })
     local path = '/Users/' .. self.user_id .. '/Items/Latest?' .. query_string
