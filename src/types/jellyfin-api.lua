@@ -30,6 +30,7 @@
 ---@field IndexNumber integer? Episode number
 ---@field ParentIndexNumber integer? Season number
 ---@field ProductionYear integer? Series production year
+---@field EpisodeTitle string? Episode title or nil
 ---@field UserData JellyfinUserData? User data object
 ---@field SeriesName string? Series name
 ---@field VirtualType 'continue_watching'|'next_up'|'latest'|nil

@@ -981,7 +981,7 @@ end
 ---@param item JellyfinItem The item used to derive the title
 ---@return string title The formated title
 local function format_title(item)
-    local title = item.Name or 'Unknown'
+    local title = item.EpisodeTitle or item.Name or 'Unknown'
     if item.SeriesName then
         local s = item.ParentIndexNumber or '?'
         local e = item.IndexNumber or '?'
@@ -989,7 +989,7 @@ local function format_title(item)
             item.SeriesName,
             s,
             e,
-            item.Name or 'Unknown'
+            title
         )
     end
     if item.ProductionYear then
