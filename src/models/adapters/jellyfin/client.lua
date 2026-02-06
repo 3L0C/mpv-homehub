@@ -384,7 +384,8 @@ function JellyfinClient:get_items(parent_id, params)
             'PrimaryImageAspectRatio',
             'Overview',
             'MediaSources',
-            'ProductionYear'
+            'ProductionYear',
+            'EpisodeTitle'
         },
         -- Default sorting goal: Sort series name > season number > episode number
         sortBy = {
@@ -538,7 +539,7 @@ function JellyfinClient:get_next_episode(current_episode)
     local query_params = {
         userId = self.user_id,
         parentId = season_id,
-        fields = 'PrimaryImageAspectRatio,Overview,MediaSources,ProductionYear',
+        fields = 'PrimaryImageAspectRatio,Overview,MediaSources,ProductionYear,EpisodeTitle',
         sortBy = 'IndexNumber',
         sortOrder = 'Ascending',
     }
@@ -644,7 +645,7 @@ function JellyfinClient:get_prev_episode(current_episode)
     local query_params = {
         userId = self.user_id,
         parentId = season_id,
-        fields = 'PrimaryImageAspectRatio,Overview,MediaSources,ProductionYear',
+        fields = 'PrimaryImageAspectRatio,Overview,MediaSources,ProductionYear,EpisodeTitle',
         sortBy = 'IndexNumber',
         sortOrder = 'Ascending',
     }
