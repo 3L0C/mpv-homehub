@@ -3,7 +3,6 @@
 --]]
 
 local mp = require 'mp'
-local utils = require 'mp.utils'
 
 local events = require 'src.core.events'
 local hh_utils = require 'src.core.utils'
@@ -50,6 +49,7 @@ local text_state = {
     search_results = nil,
 }
 
+---@type SearchClient
 local search_client
 
 ---Set the keybind table to user defined keys or defaults
@@ -60,17 +60,17 @@ local function set_keybind_table()
     local text_keybind_table = options.keybinds and options.keybinds.text or {}
 
     text_state.keybinds = {
-        up = text_keybind_table.up or {'UP'},
-        down = text_keybind_table.down or {'DOWN'},
-        back = text_keybind_table.back or {'LEFT'},
-        select = text_keybind_table.select or {'RIGHT', 'ENTER'},
-        multiselect = text_keybind_table.multiselect or {'CTRL+ENTER', 'SPACE'},
-        page_up = text_keybind_table.page_up or {'PGUP', 'CTRL+UP'},
-        page_down = text_keybind_table.page_down or {'PGDWN', 'CTRL+DOWN'},
-        search = text_keybind_table.search or {'/'},
-        help = text_keybind_table.help or {'?'},
-        toggle = text_keybind_table.toggle or {'CTRL+j', 'MENU'},
-        refresh = text_keybind_table.refresh or {'R'},
+        up = text_keybind_table.up or { 'UP' },
+        down = text_keybind_table.down or { 'DOWN' },
+        back = text_keybind_table.back or { 'LEFT' },
+        select = text_keybind_table.select or { 'RIGHT', 'ENTER' },
+        multiselect = text_keybind_table.multiselect or { 'CTRL+ENTER', 'SPACE' },
+        page_up = text_keybind_table.page_up or { 'PGUP', 'CTRL+UP' },
+        page_down = text_keybind_table.page_down or { 'PGDWN', 'CTRL+DOWN' },
+        search = text_keybind_table.search or { '/' },
+        help = text_keybind_table.help or { '?' },
+        toggle = text_keybind_table.toggle or { 'CTRL+j', 'MENU' },
+        refresh = text_keybind_table.refresh or { 'R' },
     }
 end
 
@@ -91,14 +91,14 @@ local function bind_keys()
         'nav.down',
         'ui_text.active',
         nil,
-        { repeatable = true}
+        { repeatable = true }
     )
     hh_utils.bind_keys(
         text_state.keybinds.back,
         'nav.back',
         'ui_text.active',
         nil,
-        { repeatable = true}
+        { repeatable = true }
     )
     hh_utils.bind_keys(
         text_state.keybinds.select,
@@ -123,7 +123,6 @@ local function bind_keys()
     -- TODO: implement actual events for these keys
     -- hh_utils.bind_keys(text_state.keys.page_up, '', 'ui_text')
     -- hh_utils.bind_keys(text_state.keys.page_down, '', 'ui_text')
-    -- hh_utils.bind_keys(text_state.keys.search, '', 'ui_text')
     -- hh_utils.bind_keys(text_state.keys.help, '', 'ui_text')
 
     text_state.keybinds_active = true
@@ -152,7 +151,7 @@ local function format_breadcrumb(trail, max_tail)
     end
 
     -- Build tail: ... / component / component
-    local parts = {'...'}
+    local parts = { '...' }
     for i = count - max_tail + 1, count do
         table.insert(parts, trail[i])
     end
@@ -215,7 +214,7 @@ end
 ---@param data SearchResultsData
 local function render_search_results(data)
     if not search_client:is_active() then
-        log.warn('text', {'Trying to render search results while client is inactive.'})
+        log.warn('text', { 'Trying to render search results while client is inactive.' })
         return
     end
 
@@ -413,7 +412,7 @@ local handlers = {
 
     ---@param event_name EventName
     ---@param data SearchResultsData|EventData
-    [text_state.search_events.results] = function (event_name, data)
+    [text_state.search_events.results] = function(event_name, data)
         if not hh_utils.validate_data(event_name, data, hh_utils.is_search_results, 'text') then
             return
         end
