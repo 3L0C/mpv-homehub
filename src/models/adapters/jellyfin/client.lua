@@ -993,8 +993,7 @@ local function format_title(item)
     if item.SeriesName then
         local s = item.ParentIndexNumber or '?'
         local e = item.IndexNumber or '?'
-        title = ('%s - S%s:E%s - %s'):format(
-            item.SeriesName,
+        title = ('S%s:E%s - %s'):format(
             s,
             e,
             title
